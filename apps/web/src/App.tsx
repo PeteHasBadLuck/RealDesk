@@ -70,28 +70,41 @@ export default function App(){
  }
  function wireSession(session:any,call:Call,contact:Contact|null,config:any,consent:boolean){
   sessionRef.current=session;finishOpenRef.current=false;setSelected(contact);setActiveCall(call);setCallStarted(Date.now());setSection("Agent desktop");setMuted(false);setRecordedBlob(null);setRecording(false);setRecordingEnabled(!!config.recordingEnabled);
+  const handledRemoteTracks=new Set<MediaStreamTrack>();
+  const handleRemoteTrack=(pc:any,track:MediaStreamTrack,streams?:MediaStream[])=>{
+   if(!track||track.kind!=="audio"||handledRemoteTracks.has(track))return;
+   handledRemoteTracks.add(track);
+   const stream=streams?.[0]||new MediaStream([track]);
+   const remote=new Audio();remote.autoplay=true;remote.srcObject=stream;audioRef.current=remote;remote.play().catch(()=>flash("Click the page once to allow call audio playback."));
+   if(config.recordingEnabled&&consent&&typeof MediaRecorder!=="undefined"&&!recorderRef.current){
+    try{
+     const context=new AudioContext();audioContextRef.current=context;const destination=context.createMediaStreamDestination();
+     const tracks=[...pc.getSenders().map((sender:any)=>sender.track),...pc.getReceivers().map((receiver:any)=>receiver.track)].filter((item:any)=>item&&item.kind==="audio"&&item.readyState!=="ended");
+     for(const item of tracks){try{context.createMediaStreamSource(new MediaStream([item])).connect(destination)}catch{}}
+     if(destination.stream.getAudioTracks().length){
+      const recorder=new MediaRecorder(destination.stream);chunksRef.current=[];
+      recorder.ondataavailable=(dataEvent:BlobEvent)=>{if(dataEvent.data.size)chunksRef.current.push(dataEvent.data)};
+      recorder.onstop=()=>setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));
+      recorder.start(1000);recorderRef.current=recorder;setRecording(true);
+     }
+    }catch{flash("Recording could not start; verify browser support and consent settings.")}
+   }
+  };
+  const attachPeerConnection=(pc:any)=>{
+   if(!pc||pc.__realDeskBound)return;
+   pc.__realDeskBound=true;
+   pc.addEventListener("track",(event:any)=>handleRemoteTrack(pc,event.track,event.streams));
+   // JsSIP may create the peer connection before wireSession attaches its listener.
+   // Attach existing receiver tracks as well so audio and recording don't silently miss the call.
+   for(const receiver of pc.getReceivers?.()||[]){
+    const track=receiver.track;
+    if(track&&track.kind==="audio"&&track.readyState!=="ended")handleRemoteTrack(pc,track,[]);
+   }
+  };
+  session.on("peerconnection",(event:any)=>attachPeerConnection(event.peerconnection));
+  if(session.connection)attachPeerConnection(session.connection);
   session.on("accepted",()=>{setMicAllowed(true);flash("Call connected.")});
   session.on("confirmed",()=>setMicAllowed(true));
-  session.on("peerconnection",(event:any)=>{
-   const pc=event.peerconnection;
-   pc.addEventListener("track",(trackEvent:any)=>{
-    const stream=trackEvent.streams?.[0]||new MediaStream([trackEvent.track]);
-    const remote=new Audio();remote.autoplay=true;remote.srcObject=stream;audioRef.current=remote;remote.play().catch(()=>flash("Click the page once to allow call audio playback."));
-    if(config.recordingEnabled&&consent&&typeof MediaRecorder!=="undefined"&&!recorderRef.current){
-     try{
-      const context=new AudioContext();audioContextRef.current=context;const destination=context.createMediaStreamDestination();
-      const tracks=[...pc.getSenders().map((sender:any)=>sender.track),...pc.getReceivers().map((receiver:any)=>receiver.track)].filter((track:any)=>track&&track.kind==="audio"&&track.readyState!=="ended");
-      for(const track of tracks){try{context.createMediaStreamSource(new MediaStream([track])).connect(destination)}catch{}}
-      if(destination.stream.getAudioTracks().length){
-       const recorder=new MediaRecorder(destination.stream);chunksRef.current=[];
-       recorder.ondataavailable=(dataEvent:BlobEvent)=>{if(dataEvent.data.size)chunksRef.current.push(dataEvent.data)};
-       recorder.onstop=()=>setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));
-       recorder.start(1000);recorderRef.current=recorder;setRecording(true);
-      }
-     }catch{flash("Recording could not start; verify browser support and consent settings.")}
-    }
-   });
-  });
   session.on("ended",()=>{if(!finishOpenRef.current){void stopCall();flash("Call ended. Select the call outcome.")}});
   session.on("failed",()=>{if(!finishOpenRef.current){void stopCall();flash("Call failed or was rejected. Select an outcome to save the attempt.")}});
  }
