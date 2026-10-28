@@ -64,6 +64,7 @@ model User {
   createdAt    DateTime @default(now())
   calls        CallRecord[] @relation("AgentCalls")
   @@unique([companyId, email])
+  @@unique([email])
   @@index([companyId, role])
 }
 
