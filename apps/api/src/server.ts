@@ -286,7 +286,8 @@ app.get("/api/audit", { preHandler: [app.authenticate] }, async (req, reply) => 
 });
 app.setErrorHandler((error, req, reply) => {
   req.log.error({ err: error }, "Request failed");
-  if (error.statusCode && error.statusCode < 500) return reply.code(error.statusCode).send({ error: error.message });
+  const statusCode = (error as any)?.statusCode;
+  if (statusCode && statusCode < 500) return reply.code(statusCode).send({ error: (error as any).message });
   return reply.code(500).send({ error: "Internal server error" });
 });
 app.addHook("onClose", async () => { await prisma.$disconnect(); });
