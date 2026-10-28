@@ -285,15 +285,29 @@ app.post("/api/contacts/import", { preHandler: [app.authenticate] }, async (req,
   const lastIndex = headers.indexOf("lastname") >= 0 ? headers.indexOf("lastname") : headers.indexOf("last_name");
   const phoneIndex = headers.indexOf("phone"), emailIndex = headers.indexOf("email");
   const companyIndex = headers.indexOf("company") >= 0 ? headers.indexOf("company") : headers.indexOf("companyname");
-  if (phoneIndex < 0 || firstIndex < 0) return reply.code(400).send({ error: "CSV requires firstName and phone columns. Optional columns: lastName, email, company." });
-  const rows = records.slice(1).map(cells => ({
-    companyId: req.session.companyId,
-    firstName: (cells[firstIndex] || "").trim().slice(0, 100),
-    lastName: lastIndex >= 0 ? (cells[lastIndex] || "").trim().slice(0, 100) : "",
-    phone: (cells[phoneIndex] || "").trim().slice(0, 40),
-    email: emailIndex >= 0 && (cells[emailIndex] || "").trim() ? (cells[emailIndex] || "").trim().slice(0, 254) : null,
-    companyName: companyIndex >= 0 ? (cells[companyIndex] || "").trim().slice(0, 160) || null : null
-  })).filter(x => x.firstName && x.phone);
+  const statusIndex = headers.indexOf("status"), notesIndex = headers.indexOf("notes");
+  const dncIndex = headers.indexOf("donotcall"), callbackIndex = headers.indexOf("callbackat");
+  if (phoneIndex < 0 || firstIndex < 0) return reply.code(400).send({ error: "CSV requires firstName and phone columns. Optional columns: lastName, email, company, status, notes, doNotCall, callbackAt." });
+  const rows = records.slice(1).map(cells => {
+    const normalizedStatus = (statusIndex >= 0 ? (cells[statusIndex] || "") : "NEW").trim().toUpperCase().replace(/\s+/g, "_");
+    const allowedStatus = ["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","WRONG_NUMBER","DO_NOT_CALL","CONVERTED"];
+    const status = allowedStatus.includes(normalizedStatus) ? normalizedStatus : "NEW";
+    const dncValue = dncIndex >= 0 ? (cells[dncIndex] || "").trim().toLowerCase() : "";
+    const callbackText = callbackIndex >= 0 ? (cells[callbackIndex] || "").trim() : "";
+    const callbackDate = callbackText ? new Date(callbackText) : null;
+    return {
+      companyId: req.session.companyId,
+      firstName: (cells[firstIndex] || "").trim().slice(0, 100),
+      lastName: lastIndex >= 0 ? (cells[lastIndex] || "").trim().slice(0, 100) : "",
+      phone: (cells[phoneIndex] || "").trim().slice(0, 40),
+      email: emailIndex >= 0 && (cells[emailIndex] || "").trim() ? (cells[emailIndex] || "").trim().slice(0, 254) : null,
+      companyName: companyIndex >= 0 ? (cells[companyIndex] || "").trim().slice(0, 160) || null : null,
+      status: status as any,
+      notes: notesIndex >= 0 ? (cells[notesIndex] || "").slice(0, 5000) || null : null,
+      doNotCall: status === "DO_NOT_CALL" || ["true","yes","1"].includes(dncValue),
+      callbackAt: callbackDate && !Number.isNaN(callbackDate.getTime()) ? callbackDate : null
+    };
+  }).filter(x => x.firstName && x.phone);
   if (!rows.length) return reply.code(400).send({ error: "No valid rows found. Every contact must have a first name and phone." });
   const result = await prisma.contact.createMany({ data: rows });
   await audit(req.session.companyId, req.session.sub, "contacts.imported", "Contact", undefined, { count: result.count });
