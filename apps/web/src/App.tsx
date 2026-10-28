@@ -129,7 +129,7 @@ export default function App(){
   try{
    const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:recordConsent})});
    incomingInviteRef.current=null;setIncomingInvite(null);wireSession(invite.session,call,invite.contact,invite.config,recordConsent);
-   invite.session.answer({mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:config.iceServers?.length?config.iceServers:[{urls:"stun:stun.l.google.com:19302"}]}});
+   invite.session.answer({mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:invite.config.iceServers?.length?invite.config.iceServers:[{urls:"stun:stun.l.google.com:19302"}]}});
    flash("Answering incoming call…");
   }catch(err:any){flash(err.message||"Could not answer call");try{invite.session.terminate()}catch{}incomingInviteRef.current=null;setIncomingInvite(null)}
  }
