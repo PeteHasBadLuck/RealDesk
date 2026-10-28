@@ -61,9 +61,9 @@ Not yet production-complete:
 
 The agent desktop uses SIP over secure WebSocket and WebRTC media; it requires a compatible PBX/provider, HTTPS, suitable NAT traversal (STUN/TURN), and provider-specific configuration. The browser recording path encrypts captured WebRTC audio on server storage, but verify that both sides are present with your actual PBX and browser before relying on recordings. Retention/deletion automation, database backup/restore, external security review, and jurisdiction-specific recording-compliance review remain incomplete. Do not use this version for real customer data until these checks are complete.
 
-## Security
+## Setup and security
 
-Read [Security and recording checklist](docs/SECURITY.md). Call recording laws and consent requirements depend on jurisdiction and participants. Recording should only be enabled after the company has established lawful notice/consent, retention, access control, and deletion processes.
+Read the [VoIP setup guide](docs/VOIP_SETUP.md) before connecting a PBX, and the [security and recording checklist](docs/SECURITY.md) before handling real customer data. Call recording laws and consent requirements depend on jurisdiction and participants. Recording should only be enabled after the company has established lawful notice/consent, retention, access control, and deletion processes.
 
 ## License
 
