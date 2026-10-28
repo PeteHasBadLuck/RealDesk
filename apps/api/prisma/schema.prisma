@@ -215,8 +215,12 @@ model LeadRecord {
   description String?
   sourceUrl   String
   phone       String?
+  phoneSourceUrl String?
   email       String?
+  emailSourceUrl String?
   location    String?
+  enrichedAt  DateTime?
+  reviewed    Boolean  @default(false)
   createdAt   DateTime @default(now())
   @@unique([companyId, sourceUrl])
   @@index([companyId, createdAt])
