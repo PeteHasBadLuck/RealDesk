@@ -62,25 +62,56 @@ app.get("/api/auth/me", { preHandler: [app.authenticate] }, async req => {
 
 app.get("/api/users", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, supervisorRoles)) return;
-  return prisma.user.findMany({ where: { companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true }, orderBy: { createdAt: "desc" } });
+  const users = await prisma.user.findMany({ where: { companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, active: true, sipUsername: true, sipDomain: true, encryptedSipSecret: true, createdAt: true }, orderBy: { createdAt: "desc" } });
+  return users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, hasSipCredentials: Boolean(u.encryptedSipSecret), sipUsername: u.sipUsername, sipDomain: u.sipDomain, createdAt: u.createdAt }));
 });
 app.post("/api/users", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, adminRoles)) return;
-  const schema = z.object({ name: z.string().min(1).max(120), email: z.string().email().max(254), password: z.string().min(14).max(200), role: z.enum(["ADMIN", "SUPERVISOR", "AGENT"]) });
-  const p = schema.safeParse(req.body); if (!p.success) return reply.code(400).send({ error: "Invalid user details; passwords must be at least 14 characters." });
-  const user = await prisma.user.create({ data: { companyId: req.session.companyId, name: p.data.name, email: p.data.email.toLowerCase(), passwordHash: await bcrypt.hash(p.data.password, 12), role: p.data.role }, select: { id: true, name: true, email: true, role: true, active: true } }).catch(() => null);
+  const schema = z.object({
+    name: z.string().min(1).max(120),
+    email: z.string().email().max(254),
+    password: z.string().min(14).max(200),
+    role: z.enum(["ADMIN", "SUPERVISOR", "AGENT"]),
+    sipUsername: z.string().max(255).optional(),
+    sipDomain: z.string().max(255).optional(),
+    sipPassword: z.string().max(500).optional()
+  });
+  const p = schema.safeParse(req.body);
+  if (!p.success) return reply.code(400).send({ error: "Invalid user details; passwords must be at least 14 characters." });
+  let encryptedSipSecret: string | undefined;
+  if (p.data.sipPassword) {
+    if (!p.data.sipUsername || !p.data.sipDomain) return reply.code(400).send({ error: "SIP username and domain are required when adding an agent SIP password." });
+    const secretKey = process.env.VOIP_ENCRYPTION_KEY;
+    if (!secretKey || secretKey.length < 32) return reply.code(503).send({ error: "Server administrator must configure VOIP_ENCRYPTION_KEY before storing credentials." });
+    const crypto = await import("node:crypto");
+    const key = crypto.createHash("sha256").update(secretKey).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    const encrypted = Buffer.concat([cipher.update(p.data.sipPassword, "utf8"), cipher.final()]);
+    encryptedSipSecret = [iv.toString("base64"), cipher.getAuthTag().toString("base64"), encrypted.toString("base64")].join(".");
+  }
+  const user = await prisma.user.create({
+    data: {
+      companyId: req.session.companyId, name: p.data.name, email: p.data.email.toLowerCase(),
+      passwordHash: await bcrypt.hash(p.data.password, 12), role: p.data.role,
+      sipUsername: p.data.sipUsername || null, sipDomain: p.data.sipDomain || null,
+      encryptedSipSecret: encryptedSipSecret || null
+    },
+    select: { id: true, name: true, email: true, role: true, active: true, sipUsername: true, sipDomain: true, encryptedSipSecret: true }
+  }).catch(() => null);
   if (!user) return reply.code(409).send({ error: "Could not create user; email may already exist." });
   await audit(req.session.companyId, req.session.sub, "user.created", "User", user.id);
-  return reply.code(201).send(user);
+  return reply.code(201).send({ id:user.id, name:user.name, email:user.email, role:user.role, active:user.active, sipUsername:user.sipUsername, sipDomain:user.sipDomain, hasSipCredentials:Boolean(user.encryptedSipSecret) });
 });
 app.patch("/api/users/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, adminRoles)) return;
   const p = z.object({ active: z.boolean().optional(), role: z.enum(["ADMIN", "SUPERVISOR", "AGENT"]).optional(), name: z.string().min(1).max(120).optional() }).safeParse(req.body);
   if (!p.success || Object.keys(p.data || {}).length === 0) return reply.code(400).send({ error: "Invalid update" });
-  if (req.params && (req.params as any).id === req.session.sub) return reply.code(400).send({ error: "Use another administrator to change your own role or active state" });
-  const result = await prisma.user.updateMany({ where: { id: (req.params as any).id, companyId: req.session.companyId }, data: p.data });
+  const id = (req.params as any).id;
+  if (id === req.session.sub) return reply.code(400).send({ error: "Use another administrator to change your own role or active state" });
+  const result = await prisma.user.updateMany({ where: { id, companyId: req.session.companyId }, data: p.data });
   if (!result.count) return reply.code(404).send({ error: "User not found" });
-  await audit(req.session.companyId, req.session.sub, "user.updated", "User", (req.params as any).id);
+  await audit(req.session.companyId, req.session.sub, "user.updated", "User", id);
   return { ok: true };
 });
 
