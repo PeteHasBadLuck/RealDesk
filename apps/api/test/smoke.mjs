@@ -159,6 +159,22 @@ async function main() {
   assert.equal(clientConfig.data.password, "ci-only-sip-secret-1001");
   assert.equal(clientConfig.data.iceServers[1].credential, "turn-ci-password");
   await call("/api/voip/client-config", { token: owner.token, expected: 403 });
+
+  await call("/api/users/" + agent1.id, {
+    method: "PATCH", token: owner.token,
+    body: { sipUsername: "1001", sipDomain: "pbx.example.test", sipPassword: "rotated-ci-sip-secret" }
+  });
+  const rotatedConfig = await call("/api/voip/client-config", { token: agentLogin.token });
+  assert.equal(rotatedConfig.data.password, "rotated-ci-sip-secret", "admin should be able to rotate SIP passwords");
+  await call("/api/users/" + agent1.id, {
+    method: "PATCH", token: owner.token, body: { clearSipCredentials: true }
+  });
+  const fallbackConfig = await call("/api/voip/client-config", { token: agentLogin.token });
+  assert.equal(fallbackConfig.data.username, "company-test", "clearing an agent profile should fall back to company SIP");
+  await call("/api/users/" + agent1.id, {
+    method: "PATCH", token: owner.token,
+    body: { sipUsername: "1001", sipDomain: "pbx.example.test", sipPassword: "ci-only-sip-secret-1001" }
+  });
   await call("/api/users", { token: agentLogin.token, expected: 403 });
 
   const agentContacts = await call("/api/contacts", { token: agentLogin.token });
