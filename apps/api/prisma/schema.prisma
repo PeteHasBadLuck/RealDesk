@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  SUPERVISOR
+  AGENT
+}
+
+enum ContactStatus {
+  NEW
+  CALLBACK
+  INTERESTED
+  NOT_INTERESTED
+  DO_NOT_CALL
+  CONVERTED
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  INITIATED
+  RINGING
+  CONNECTED
+  COMPLETED
+  FAILED
+  MISSED
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  users     User[]
+  contacts  Contact[]
+  campaigns Campaign[]
+  voip      VoipConfig?
+  calls     CallRecord[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name         String
+  email        String
+  passwordHash String
+  role         Role     @default(AGENT)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  calls        CallRecord[] @relation("AgentCalls")
+  @@unique([companyId, email])
+  @@index([companyId, role])
+}
+
+model Contact {
+  id          String        @id @default(cuid())
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  firstName   String
+  lastName    String        @default("")
+  phone       String
+  email       String?
+  companyName String?
+  status      ContactStatus @default(NEW)
+  notes       String?
+  customData  Json?
+  doNotCall   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  campaignLinks CampaignContact[]
+  calls       CallRecord[]
+  @@index([companyId, phone])
+  @@index([companyId, status])
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  contacts    CampaignContact[]
+  @@index([companyId, active])
+}
+
+model CampaignContact {
+  campaignId String
+  contactId  String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedTo String?
+  createdAt  DateTime @default(now())
+  @@id([campaignId, contactId])
+}
+
+model VoipConfig {
+  id                  String   @id @default(cuid())
+  companyId           String   @unique
+  company             Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider            String
+  sipDomain           String
+  sipUsername         String
+  encryptedSecret     String
+  outboundCallerId    String?
+  websocketUrl        String?
+  recordingEnabled    Boolean  @default(false)
+  recordingNoticeText String?
+  updatedAt           DateTime @updatedAt
+}
+
+model CallRecord {
+  id             String        @id @default(cuid())
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agentId        String
+  agent          User          @relation("AgentCalls", fields: [agentId], references: [id])
+  contactId      String?
+  contact        Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  direction      CallDirection
+  status         CallStatus    @default(INITIATED)
+  startedAt      DateTime      @default(now())
+  answeredAt     DateTime?
+  endedAt        DateTime?
+  durationSec    Int?
+  disposition    String?
+  notes          String?
+  recordingKey   String?
+  recordingMime  String?
+  recordingBytes Int?
+  recordingConsent Boolean    @default(false)
+  providerCallId String?
+  createdAt      DateTime      @default(now())
+  @@index([companyId, startedAt])
+  @@index([agentId, startedAt])
+  @@index([contactId, startedAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  companyId String
+  actorId   String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  @@index([companyId, createdAt])
+}
