@@ -6,6 +6,8 @@ import multipart from "@fastify/multipart";
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { z } from "zod";
 import { saveEncryptedRecording, readEncryptedRecording } from "./recordings.js";
 
@@ -634,11 +636,181 @@ app.post("/api/leadscout/research", { preHandler: [app.authenticate], config: { 
     return reply.code(503).send({ error: "Research failed due to a provider or network error. Please try again." });
   }
 });
+
+function isPublicIp(ip: string): boolean {
+  const version = isIP(ip);
+  if (version === 4) {
+    const octets = ip.split(".").map(Number);
+    const [a,b] = octets;
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;
+    if (a === 192 && b === 0) return false;
+    if (a === 198 && (b === 18 || b === 19)) return false;
+    if (a === 198 && b === 51) return false;
+    if (a === 203 && b === 0) return false;
+    return true;
+  }
+  if (version === 6) {
+    const normalized = ip.toLowerCase();
+    // Global unicast only. This excludes loopback, link-local, unique-local,
+    // IPv4-mapped, multicast, and unspecified IPv6 ranges.
+    return normalized.startsWith("2") || normalized.startsWith("3");
+  }
+  return false;
+}
+async function validatePublicHttpUrl(value: string): Promise<URL> {
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error("Invalid URL"); }
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("Only public HTTP(S) URLs are allowed");
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")) throw new Error("Private host is not allowed");
+  if (isIP(host)) {
+    if (!isPublicIp(host)) throw new Error("Private IP is not allowed");
+  } else {
+    let addresses: { address: string; family: number }[];
+    try { addresses = await lookup(host, { all: true, verbatim: true }); } catch { throw new Error("Host could not be resolved"); }
+    if (!addresses.length || addresses.some(item => !isPublicIp(item.address))) throw new Error("Host must resolve only to public IP addresses");
+  }
+  url.hash = "";
+  return url;
+}
+async function fetchLeadScoutHtml(startUrl: string): Promise<{ url: string; html: string } | null> {
+  let current = startUrl;
+  for (let hop = 0; hop <= 3; hop++) {
+    const url = await validatePublicHttpUrl(current);
+    const response = await fetch(url, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(7000),
+      headers: { "User-Agent": "LeadScoutResearchBot/1.0 (+public business contact research)", "Accept": "text/html,application/xhtml+xml;q=0.9" }
+    });
+    if ([301,302,303,307,308].includes(response.status)) {
+      const location = response.headers.get("location");
+      if (!location || hop === 3) return null;
+      current = new URL(location, url).toString();
+      continue;
+    }
+    if (!response.ok || !/^(text\/html|application\/xhtml\+xml)(;|$)/i.test(response.headers.get("content-type") || "")) return null;
+    const declaredLength = Number(response.headers.get("content-length") || 0);
+    if (declaredLength > 1_000_000) return null;
+    if (!response.body) return null;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > 1_000_000) { await reader.cancel(); return null; }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    const html = Buffer.concat(chunks.map(chunk => Buffer.from(chunk))).toString("utf8");
+    return { url: url.toString(), html };
+  }
+  return null;
+}
+function extractBusinessContacts(html: string) {
+  const clean = html
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript|svg|template)[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&commat;|&#64;|&#x40;/gi, "@")
+    .replace(/&period;|&#46;|&#x2e;/gi, ".")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ");
+  const emails = [...new Set((clean.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).map(x => x.toLowerCase()).filter(x => x.length <= 254 && !/\.(png|jpe?g|gif|webp|svg|css|js)$/i.test(x)))].slice(0, 5);
+  const phoneMatches = clean.match(/(?:\+?\d[\d().\s/-]{5,}\d)/g) || [];
+  const phones = [...new Set(phoneMatches.map(x => x.replace(/[^\d+]/g, "")).filter(x => {
+    const digits = x.replace(/\D/g, "");
+    return digits.length >= 7 && digits.length <= 15;
+  }))].slice(0, 5);
+  return { emails, phones };
+}
+app.post("/api/leadscout/leads/:id/enrich", { preHandler: [app.authenticate], config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const id = String((req.params as any).id);
+  const lead = await prisma.leadRecord.findFirst({ where: { id, companyId: req.session.companyId } });
+  if (!lead) return reply.code(404).send({ error: "Lead not found" });
+  const urls = [...new Set([lead.website, lead.sourceUrl].filter((x): x is string => Boolean(x)))].slice(0, 2);
+  const foundEmails: string[] = [];
+  const foundPhones: string[] = [];
+  const checkedSources: string[] = [];
+  for (const source of urls) {
+    try {
+      const page = await fetchLeadScoutHtml(source);
+      if (!page) continue;
+      const extracted = extractBusinessContacts(page.html);
+      foundEmails.push(...extracted.emails);
+      foundPhones.push(...extracted.phones);
+      checkedSources.push(page.url);
+      if (foundEmails.length && foundPhones.length) break;
+    } catch (e: any) {
+      req.log.info({ source, reason: e.message }, "LeadScout skipped a source during enrichment");
+    }
+  }
+  const email = lead.email || foundEmails[0] || null;
+  const phone = lead.phone || foundPhones[0] || null;
+  const updated = await prisma.leadRecord.update({
+    where: { id: lead.id },
+    data: { email, phone },
+  });
+  await audit(req.session.companyId, req.session.sub, "leadscout.lead_enriched", "LeadRecord", lead.id, { emailFound: Boolean(email), phoneFound: Boolean(phone), sourcesChecked: checkedSources.length });
+  return { lead: updated, emailsFound: foundEmails, phonesFound: foundPhones, sourcesChecked: checkedSources, hasPhone: Boolean(phone), hasEmail: Boolean(email) };
+});
+app.post("/api/leadscout/import-to-campaign", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const parsed = z.object({ campaignId: z.string().min(1), leadIds: z.array(z.string().min(1)).min(1).max(200), assignedTo: z.string().nullable().optional() }).safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: "Choose a campaign and between 1 and 200 leads." });
+  const campaign = await prisma.campaign.findFirst({ where: { id: parsed.data.campaignId, companyId: req.session.companyId } });
+  if (!campaign) return reply.code(404).send({ error: "Campaign not found for this company." });
+  if (parsed.data.assignedTo) {
+    const assignee = await prisma.user.findFirst({ where: { id: parsed.data.assignedTo, companyId: req.session.companyId, active: true, role: "AGENT" } });
+    if (!assignee) return reply.code(400).send({ error: "Choose an active call agent from this company." });
+  }
+  const leads = await prisma.leadRecord.findMany({ where: { id: { in: parsed.data.leadIds }, companyId: req.session.companyId } });
+  if (!leads.length) return reply.code(400).send({ error: "No selected leads belong to this company." });
+  let created = 0, linked = 0, skippedNoPhone = 0, reused = 0;
+  for (const lead of leads) {
+    const phone = (lead.phone || "").trim();
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 7 || digits.length > 15) { skippedNoPhone++; continue; }
+    let contact = await prisma.contact.findFirst({ where: { companyId: req.session.companyId, phone } });
+    if (!contact) {
+      const parts = lead.name.trim().split(/\s+/);
+      const firstName = (parts.shift() || lead.name || "Lead").slice(0, 100);
+      const lastName = parts.join(" ").slice(0, 100);
+      contact = await prisma.contact.create({
+        data: {
+          companyId: req.session.companyId, firstName, lastName, phone,
+          email: lead.email && z.string().email().safeParse(lead.email).success ? lead.email : null,
+          companyName: lead.name.slice(0, 160),
+          notes: [lead.description, "LeadScout source: " + lead.sourceUrl].filter(Boolean).join("\n").slice(0, 5000),
+          status: "NEW"
+        }
+      });
+      created++;
+    } else reused++;
+    const existingLink = await prisma.campaignContact.findUnique({ where: { campaignId_contactId: { campaignId: campaign.id, contactId: contact.id } } });
+    if (!existingLink) {
+      await prisma.campaignContact.create({ data: { campaignId: campaign.id, contactId: contact.id, assignedTo: parsed.data.assignedTo ?? null } });
+      linked++;
+    } else if (parsed.data.assignedTo !== undefined) {
+      await prisma.campaignContact.update({ where: { campaignId_contactId: { campaignId: campaign.id, contactId: contact.id } }, data: { assignedTo: parsed.data.assignedTo } });
+    }
+  }
+  await audit(req.session.companyId, req.session.sub, "leadscout.leads_imported_to_campaign", "Campaign", campaign.id, { selected: leads.length, created, linked, reused, skippedNoPhone });
+  return { campaignId: campaign.id, campaignName: campaign.name, selected: leads.length, contactsCreated: created, existingContactsReused: reused, linkedToCampaign: linked, skippedWithoutValidPhone: skippedNoPhone };
+});
 app.get("/api/leadscout/export.csv", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, supervisorRoles)) return;
   const leads = await prisma.leadRecord.findMany({ where: { companyId: req.session.companyId }, orderBy: { createdAt: "desc" }, take: 5000 });
   const cell = (v: unknown) => { const value = String(v ?? ""); return /^[=+@\-\t\r]/.test(value) ? "'" + value : value; };
-  const csv = ["Name,Website,Description,Source URL,Collected At", ...leads.map(x => [x.name,x.website,x.description,x.sourceUrl,x.createdAt.toISOString()].map(v => '"' + cell(v).replaceAll('"','""') + '"').join(","))].join("\r\n");
+  const csv = ["Name,Website,Phone,Email,Location,Description,Source URL,Collected At", ...leads.map(x => [x.name,x.website,x.phone,x.email,x.location,x.description,x.sourceUrl,x.createdAt.toISOString()].map(v => '"' + cell(v).replaceAll('"','""') + '"').join(","))].join("\r\n");
   return reply.header("Content-Type", "text/csv; charset=utf-8").header("Content-Disposition", 'attachment; filename="leadscout-leads.csv"').send(csv);
 });
 app.get("/api/reports/summary", { preHandler: [app.authenticate] }, async req => {
