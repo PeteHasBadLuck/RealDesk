@@ -9,4 +9,4 @@ RUN npm --workspace apps/api run db:generate && npm --workspace apps/api run bui
 WORKDIR /app
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["sh","-c","npm --workspace apps/api run db:migrate && npm --workspace apps/api run db:seed && npm --workspace apps/api run start"]
+CMD ["sh","-c","npm --workspace apps/api run db:push && npm --workspace apps/api run db:seed && npm --workspace apps/api run start"]
