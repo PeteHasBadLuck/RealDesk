@@ -184,6 +184,22 @@ app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (re
   return updated;
 });
 
+app.get("/api/voip/client-config", { preHandler: [app.authenticate] }, async (req, reply) => {
+  const config = await prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } });
+  if (!config || !config.websocketUrl) return reply.code(409).send({ error: "VoIP is not configured with a secure WebSocket URL" });
+  const crypto = await import("node:crypto");
+  try {
+    const [ivText, tagText, encryptedText] = config.encryptedSecret.split(".");
+    const key = crypto.createHash("sha256").update(process.env.VOIP_ENCRYPTION_KEY!).digest();
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64"));
+    decipher.setAuthTag(Buffer.from(tagText, "base64"));
+    const password = Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
+    await audit(req.session.companyId, req.session.sub, "voip.client_config_accessed", "VoipConfig", config.id);
+    return { uri: `sip:${config.sipUsername}@${config.sipDomain}`, websocketUrl: config.websocketUrl, username: config.sipUsername, password, displayName: (await prisma.user.findUnique({ where: { id: req.session.sub } }))?.name || "RealDesk agent", recordingEnabled: config.recordingEnabled };
+  } catch {
+    return reply.code(503).send({ error: "VoIP credentials could not be decrypted; check the server encryption key" });
+  }
+});
 app.get("/api/voip/config", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, adminRoles)) return;
   const v = await prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } });
