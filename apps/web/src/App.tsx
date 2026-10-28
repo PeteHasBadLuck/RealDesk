@@ -165,13 +165,13 @@ export default function App(){
 }
  async function rejectIncoming(){
   const invite=incomingInviteRef.current;if(!invite)return;
-  incomingInviteRef.current=null;setIncomingInvite(null);try{invite.session.terminate()}catch{}
+  incomingInviteRef.current=null;setIncomingInvite(null);setRecordConsent(false);try{invite.session.terminate()}catch{}
   try{
    const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:false})});
-   const done=await request<Call>("/api/calls/"+call.id+"/finish",{method:"PATCH",body:JSON.stringify({disposition:"NO_ANSWER",notes:"Incoming call rejected by agent.",durationSec:0,status:"MISSED"})});
-   setCalls(old=>[done,...old.filter(c=>c.id!==done.id)]);await refresh();
-  }catch(err:any){flash(err.message)}
- }
+   sessionRef.current=null;setSelected(invite.contact);setActiveCall(call);setCallStarted(Date.now());setDisposition("");setCallNotes("Incoming call rejected by agent.");setRecordedBlob(null);setShowFinish(true);finishOpenRef.current=true;
+   flash("Choose an outcome for the rejected incoming call.");
+  }catch(err:any){flash("Could not log rejected incoming call: "+err.message)}
+}
  async function startCall(contact:Contact,direction:"OUTBOUND"|"INBOUND"="OUTBOUND"){
   if(contact.doNotCall||contact.status==="DO_NOT_CALL"||contact.status==="WRONG_NUMBER"){flash(contact.status==="WRONG_NUMBER"?"This contact was marked as a wrong number. Update the phone number before calling again.":"This contact is on the do-not-call list.");return}
   if(!window.isSecureContext){flash("Calling requires HTTPS (or localhost) so the browser can access the microphone.");return}
