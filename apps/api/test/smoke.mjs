@@ -177,6 +177,17 @@ async function main() {
   assert.equal(clientConfig.data.iceServers[1].credential, "turn-ci-password");
   await call("/api/voip/client-config", { token: owner.token, expected: 403 });
 
+  const presence = await call("/api/agents/presence", {
+    method: "PATCH", token: agentLogin.token, body: { presence: "AVAILABLE" }
+  });
+  assert.equal(presence.data.presence, "AVAILABLE");
+  const presenceUsers = await call("/api/users", { token: owner.token });
+  assert.equal(presenceUsers.data.find(u => u.id === agent1.id).presence, "AVAILABLE");
+  await call("/api/agents/presence", {
+    method: "PATCH", token: agentLogin.token, body: { presence: "ON_BREAK" }
+  });
+  await call("/api/agents/presence", { method: "PATCH", token: owner.token, expected: 403, body: { presence: "AVAILABLE" } });
+
   await call("/api/users/" + agent1.id, {
     method: "PATCH", token: owner.token,
     body: { sipUsername: "1001", sipDomain: "pbx.example.test", sipPassword: "rotated-ci-sip-secret" }
