@@ -1,0 +1,7 @@
+services:
+  realdesk:
+    build: .
+    container_name: realdesk
+    ports:
+      - "8080:80"
+    restart: unless-stopped
