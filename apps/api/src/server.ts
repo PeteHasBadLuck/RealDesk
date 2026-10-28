@@ -124,6 +124,18 @@ app.patch("/api/users/:id", { preHandler: [app.authenticate] }, async (req, repl
   return { ok: true };
 });
 
+app.get("/api/contacts/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
+  const id = (req.params as any).id;
+  const contact = await prisma.contact.findFirst({
+    where: {
+      id,
+      companyId: req.session.companyId,
+      ...(req.session.role === "AGENT" ? { AND: [{ OR: [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }] }] } : {})
+    }
+  });
+  if (!contact) return reply.code(404).send({ error: "Contact not found or not assigned to you" });
+  return contact;
+});
 app.get("/api/contacts", { preHandler: [app.authenticate] }, async req => {
   const q = (req.query as any)?.q?.toString().slice(0, 100);
   const status = (req.query as any)?.status?.toString();
