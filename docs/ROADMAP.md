@@ -1,33 +1,37 @@
 # RealDesk roadmap
 
-## Phase 1 — Browser prototype
+## Phase 1 — Contact-center UI prototype
 
-- [x] Lead overview and summary cards
-- [x] Add a lead
-- [x] Search and stage filtering
-- [x] CSV export
-- [x] Docker-based static preview
+- [x] Agent desktop layout
+- [x] Campaign contact queue, search, and status filters
+- [x] Contact details and interaction history
+- [x] Simulated softphone controls and agent availability
+- [x] Call outcome logging and notes
+- [x] Contact editing
+- [x] Browser-only static deployment path
 
-## Phase 2 — Real self-hosted application
+## Phase 2 — Multi-user application
 
-- [ ] Add a backend API and PostgreSQL persistence
-- [ ] Add secure authentication and password reset
-- [ ] Add organization membership and role-based permissions
-- [ ] Add lead detail pages, editable leads, companies, and tasks
-- [ ] Add database migrations and input validation
-- [ ] Add tests and CI
-- [ ] Add HTTPS/reverse proxy and operational health checks
-- [ ] Add automated, restorable backups
+- [ ] Backend API and PostgreSQL persistence
+- [ ] Secure authentication, sessions, password reset, and roles
+- [ ] Campaign creation and contact-list import/export
+- [ ] Shared contact history and agent assignment
+- [ ] Callback scheduling and due queue
+- [ ] Audit trail, validation, rate limiting, and tests
+- [ ] Automated backups and restore documentation
 
-## Phase 3 — Production readiness
+## Phase 3 — Real contact-center capabilities
 
-- [ ] Threat model and security review
-- [ ] Audit log for sensitive changes
-- [ ] Rate limiting and session lifecycle controls
-- [ ] Import validation and duplicate detection
-- [ ] Document upgrade and rollback procedures
-- [ ] Verify license headers and include full AGPL-3.0 license text
+- [ ] SIP/WebRTC integration through a configurable telephony provider
+- [ ] Inbound and outbound call handling
+- [ ] Call disposition and post-call workflow
+- [ ] Call queues and skill-based routing
+- [ ] Do-not-call lists, consent records, and regional compliance controls
+- [ ] Optional recording/transcription integrations with explicit controls
+- [ ] Supervisor dashboard and reports
+- [ ] Omnichannel inbox for email and web chat
+- [ ] Advanced dialer modes only after reliability and compliance foundations
 
-## Important prototype limitations
+## Prototype limitations
 
-The initial `index.html` is a browser-only demo. Leads are saved to the current browser's local storage, not to the server or a shared database. It has no authentication and is not suitable for real personal/customer data or multi-user use. The Docker setup only serves the static demo; it is not yet a production CRM backend.
+The current index.html is a static browser prototype. The softphone is simulated and places no calls. Records live in the current browser's local storage and do not sync between devices or agents. There is no backend, authentication, database, or real telephony connection. Do not expose it as a production contact center or enter real customer data yet.
