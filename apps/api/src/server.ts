@@ -18,7 +18,7 @@ await app.register(jwt, { secret: JWT_SECRET, sign: { expiresIn: "8h" } });
 await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 await app.register(multipart, { limits: { fileSize: 100_000_000, files: 1 } });
 
-type Session = { sub: string; companyId: string; role: Role; email: string };
+type Session = { sub: string; companyId: string; role: Role; email: string; sessionVersion: number };
 declare module "fastify" {
   interface FastifyRequest { session: Session }
   interface FastifyInstance { authenticate: (req: FastifyRequest, reply: any) => Promise<void> }
@@ -28,8 +28,8 @@ app.decorate("authenticate", async (req: FastifyRequest, reply: any) => {
     await req.jwtVerify();
     const payload = req.user as Session;
     const user = await prisma.user.findFirst({ where: { id: payload.sub, companyId: payload.companyId, active: true } });
-    if (!user) return reply.code(401).send({ error: "Session is no longer valid" });
-    req.session = { sub: user.id, companyId: user.companyId, role: user.role, email: user.email };
+    if (!user || payload.sessionVersion !== user.sessionVersion) return reply.code(401).send({ error: "Session is no longer valid" });
+    req.session = { sub: user.id, companyId: user.companyId, role: user.role, email: user.email, sessionVersion: user.sessionVersion };
   } catch { return reply.code(401).send({ error: "Authentication required" }); }
 });
 const adminRoles: Role[] = ["OWNER", "ADMIN"];
@@ -66,11 +66,11 @@ app.post("/api/auth/register-company", { config: { rateLimit: { max: 3, timeWind
           passwordHash: await bcrypt.hash(parsed.data.password, 12),
           role: "OWNER"
         },
-        select: { id: true, name: true, email: true, role: true, company: { select: { name: true } } }
+        select: { id: true, name: true, email: true, role: true, sessionVersion: true, company: { select: { name: true } } }
       });
       return { company, user };
     });
-    const token = app.jwt.sign({ sub: created.user.id, companyId: created.company.id, role: created.user.role, email: created.user.email });
+    const token = app.jwt.sign({ sub: created.user.id, companyId: created.company.id, role: created.user.role, email: created.user.email, sessionVersion: created.user.sessionVersion });
     await audit(created.company.id, created.user.id, "company.registered", "Company", created.company.id);
     return reply.code(201).send({ token, user: created.user });
   } catch (error: any) {
@@ -87,7 +87,7 @@ app.post("/api/auth/login", { config: { rateLimit: { max: 8, timeWindow: "1 minu
   if (candidates.length !== 1 || !(await bcrypt.compare(parsed.data.password, candidates[0].passwordHash)))
     return reply.code(401).send({ error: "Invalid credentials" });
   const user = candidates[0];
-  const token = app.jwt.sign({ sub: user.id, companyId: user.companyId, role: user.role, email: user.email });
+  const token = app.jwt.sign({ sub: user.id, companyId: user.companyId, role: user.role, email: user.email, sessionVersion: user.sessionVersion });
   return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, company: { name: user.company.name } } };
 });
 app.get("/api/auth/me", { preHandler: [app.authenticate] }, async req => {
@@ -99,8 +99,14 @@ app.post("/api/auth/change-password", { preHandler: [app.authenticate] }, async 
   if (!p.success) return reply.code(400).send({ error: "New password must be at least 14 characters." });
   const user = await prisma.user.findFirst({ where: { id: req.session.sub, companyId: req.session.companyId, active: true } });
   if (!user || !(await bcrypt.compare(p.data.currentPassword, user.passwordHash))) return reply.code(401).send({ error: "Current password is incorrect." });
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(p.data.newPassword, 12) } });
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(p.data.newPassword, 12), sessionVersion: { increment: 1 } } });
   await audit(req.session.companyId, req.session.sub, "auth.password_changed", "User", user.id);
+  const token = app.jwt.sign({ sub: updated.id, companyId: updated.companyId, role: updated.role, email: updated.email, sessionVersion: updated.sessionVersion });
+  return { ok: true, token };
+});
+app.post("/api/auth/logout", { preHandler: [app.authenticate] }, async (req, reply) => {
+  await prisma.user.update({ where: { id: req.session.sub }, data: { sessionVersion: { increment: 1 } } });
+  await audit(req.session.companyId, req.session.sub, "auth.logged_out", "User", req.session.sub);
   return { ok: true };
 });
 
