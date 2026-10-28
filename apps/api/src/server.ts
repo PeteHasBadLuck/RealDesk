@@ -126,7 +126,7 @@ app.get("/api/contacts", { preHandler: [app.authenticate] }, async req => {
   if (and.length) where.AND = and;
   return prisma.contact.findMany({ where, orderBy: { updatedAt: "desc" }, take: 500 });
 });
-const contactSchema = z.object({ firstName: z.string().min(1).max(100), lastName: z.string().max(100).optional().default(""), phone: z.string().min(3).max(40), email: z.string().email().max(254).optional().or(z.literal("")), companyName: z.string().max(160).optional(), status: z.enum(["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","DO_NOT_CALL","CONVERTED"]).optional(), notes: z.string().max(5000).optional(), doNotCall: z.boolean().optional() });
+const contactSchema = z.object({ firstName: z.string().min(1).max(100), lastName: z.string().max(100).optional().default(""), phone: z.string().min(3).max(40), email: z.string().email().max(254).optional().or(z.literal("")), companyName: z.string().max(160).optional(), status: z.enum(["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","WRONG_NUMBER","DO_NOT_CALL","CONVERTED"]).optional(), notes: z.string().max(5000).optional(), doNotCall: z.boolean().optional() });
 app.post("/api/contacts", { preHandler: [app.authenticate] }, async (req, reply) => {
   const p = contactSchema.safeParse(req.body); if (!p.success) return reply.code(400).send({ error: "Invalid contact details", details: p.error.flatten() });
   const contact = await prisma.contact.create({ data: { ...p.data, email: p.data.email || null, companyId: req.session.companyId } });
