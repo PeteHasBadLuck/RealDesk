@@ -1,23 +1,20 @@
 name: CI
-
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
-  check-static-app:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check required files
-        run: |
-          test -s index.html
-          test -s Dockerfile
-          test -s docker-compose.yml
-          test -s docs/DEPLOYMENT.md
-      - name: Check HTML has expected app landmarks
-        run: |
-          grep -q '<title>RealDesk' index.html
-          grep -q 'id="lead-form"' index.html
-          grep -q 'id="export-btn"' index.html
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm --workspace apps/api run db:generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+      - run: npm --workspace apps/api run build
+      - run: npm --workspace apps/web run build
