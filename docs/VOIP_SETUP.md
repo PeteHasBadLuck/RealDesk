@@ -6,14 +6,14 @@ RealDesk uses a browser SIP client (JsSIP) with WebRTC media. This works only wi
 
 The company's PBX/provider must provide:
 
-- SIP over secure WebSocket (\`wss://...\`) reachable from the browser
+- SIP over secure WebSocket (`wss://...`) reachable from the browser
 - WebRTC audio/media support for each agent extension
 - A SIP user/extension and password per agent when possible
 - An outbound dialing route that accepts the destination format RealDesk sends
 - HTTPS for the RealDesk website
 - Working NAT traversal: STUN and preferably TURN servers where direct WebRTC media connectivity does not work
 
-The default STUN configuration is a public test fallback, not a production relay service. Many networks require TURN. RealDesk has an optional STUN/TURN JSON field in admin VoIP settings. TURN usernames and credentials are encrypted using \`VOIP_ENCRYPTION_KEY\`.
+The default STUN configuration is a public test fallback, not a production relay service. Many networks require TURN. RealDesk has an optional STUN/TURN JSON field in admin VoIP settings. TURN usernames and credentials are encrypted using `VOIP_ENCRYPTION_KEY`.
 
 ## Configure it
 
@@ -22,12 +22,12 @@ The default STUN configuration is a public test fallback, not a production relay
 3. Add each call agent under **Admin portal → Users**. Prefer their individual SIP username, SIP domain, and password. Individual credentials are encrypted separately and override the company-level SIP credentials for that agent.
 4. Add company STUN/TURN servers as JSON when needed. Example structure:
 
-   \`\`\`json
+   ```json
    [
      { "urls": "stun:stun.example.net:3478" },
      { "urls": "turn:turn.example.net:3478", "username": "turn-user", "credential": "turn-password" }
    ]
-   \`\`\`
+   ```
 
    Replace the example hosts and credentials with values supplied by your provider/TURN administrator. Only configure a TURN username and credential when required by your TURN service.
 5. Save the settings. On the agent desktop, click **Connect phone** and wait until it reports **Phone connected**. Then make a controlled test call to a number you are authorized to call.
