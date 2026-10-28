@@ -71,7 +71,7 @@ async function main() {
 
   // LeadScout provider keys are encrypted, masked, and scoped to one company.
   await call("/api/leadscout/providers/brave", {
-    method: "PUT", token: owner.token, method: "PUT", expected: 200,
+    method: "PUT", token: owner.token, expected: 200,
     body: { apiKey: "ci-brave-search-api-key-not-real" }
   });
   const leadProviders = await call("/api/leadscout/providers", { token: owner.token });
