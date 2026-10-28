@@ -46,6 +46,8 @@ services:
       dockerfile: apps/web/Dockerfile
     container_name: realdesk-web
     restart: unless-stopped
+    environment:
+      API_UPSTREAM: api:3001
     ports:
       - "${WEB_PORT:-8080}:10000"
     depends_on: [api]
