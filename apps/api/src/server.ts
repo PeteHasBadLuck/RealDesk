@@ -222,7 +222,7 @@ app.get("/api/contacts", { preHandler: [app.authenticate] }, async req => {
   if (and.length) where.AND = and;
   return prisma.contact.findMany({ where, orderBy: { updatedAt: "desc" }, take: 500 });
 });
-const contactSchema = z.object({ firstName: z.string().min(1).max(100), lastName: z.string().max(100).optional().default(""), phone: z.string().min(3).max(40), email: z.string().email().max(254).optional().or(z.literal("")), companyName: z.string().max(160).optional(), status: z.enum(["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","WRONG_NUMBER","DO_NOT_CALL","CONVERTED"]).optional(), notes: z.string().max(5000).optional(), doNotCall: z.boolean().optional() });
+const contactSchema = z.object({ firstName: z.string().min(1).max(100), lastName: z.string().max(100).optional().default(""), phone: z.string().min(3).max(40), email: z.string().email().max(254).optional().or(z.literal("")), companyName: z.string().max(160).optional(), status: z.enum(["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","WRONG_NUMBER","DO_NOT_CALL","CONVERTED"]).optional(), notes: z.string().max(5000).optional(), doNotCall: z.boolean().optional(), callbackAt: z.string().datetime().nullable().optional() });
 app.post("/api/contacts", { preHandler: [app.authenticate] }, async (req, reply) => {
   const p = contactSchema.safeParse(req.body); if (!p.success) return reply.code(400).send({ error: "Invalid contact details", details: p.error.flatten() });
   const contact = await prisma.contact.create({ data: { ...p.data, email: p.data.email || null, companyId: req.session.companyId } });
@@ -357,8 +357,10 @@ app.post("/api/calls", { preHandler: [app.authenticate] }, async (req, reply) =>
   return reply.code(201).send(call);
 });
 app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (req, reply) => {
-  const p = z.object({ disposition: z.enum(dispositions), notes: z.string().max(5000).optional(), durationSec: z.number().int().min(0).max(86400).optional(), status: z.enum(["COMPLETED","FAILED","MISSED"]).default("COMPLETED") }).safeParse(req.body);
+  const p = z.object({ disposition: z.enum(dispositions), notes: z.string().max(5000).optional(), durationSec: z.number().int().min(0).max(86400).optional(), status: z.enum(["COMPLETED","FAILED","MISSED"]).default("COMPLETED"), callbackAt: z.string().datetime().optional() }).safeParse(req.body);
   if (!p.success) return reply.code(400).send({ error: "Choose a valid call ending reason" });
+  if (p.data.disposition === "CALLBACK_REQUESTED" && !p.data.callbackAt) return reply.code(400).send({ error: "Choose a callback date and time before saving this outcome." });
+  if (p.data.disposition !== "CALLBACK_REQUESTED" && p.data.callbackAt) return reply.code(400).send({ error: "A callback date is only valid for the callback-requested outcome." });
   const id = (req.params as any).id;
   const call = await prisma.callRecord.findFirst({ where: { id, companyId: req.session.companyId, ...(supervisorRoles.includes(req.session.role) ? {} : { agentId: req.session.sub }) } });
   if (!call) return reply.code(404).send({ error: "Call not found" });
@@ -366,7 +368,7 @@ app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (re
   const updated = await prisma.callRecord.update({ where: { id }, data: { status: p.data.status, disposition: p.data.disposition, notes: p.data.notes, durationSec: p.data.durationSec, endedAt: new Date() } });
   const statusMap: Record<string,string> = { INTERESTED: "INTERESTED", CALLBACK_REQUESTED: "CALLBACK", NOT_INTERESTED: "NOT_INTERESTED", WRONG_NUMBER: "WRONG_NUMBER", SALE_COMPLETED: "CONVERTED", DO_NOT_CALL: "DO_NOT_CALL" };
   const contactStatus = statusMap[p.data.disposition];
-  if (call.contactId && contactStatus) await prisma.contact.updateMany({ where: { id: call.contactId, companyId: req.session.companyId }, data: { status: contactStatus as any, ...(p.data.disposition === "DO_NOT_CALL" ? { doNotCall: true } : {}) } });
+  if (call.contactId && contactStatus) await prisma.contact.updateMany({ where: { id: call.contactId, companyId: req.session.companyId }, data: { status: contactStatus as any, callbackAt: p.data.disposition === "CALLBACK_REQUESTED" ? new Date(p.data.callbackAt!) : null, ...(p.data.disposition === "DO_NOT_CALL" ? { doNotCall: true } : {}) } });
   await audit(req.session.companyId, req.session.sub, "call.finished", "CallRecord", id, { disposition: p.data.disposition, status: p.data.status });
   return updated;
 });
