@@ -148,19 +148,44 @@ app.delete("/api/contacts/:id", { preHandler: [app.authenticate] }, async (req, 
 app.post("/api/contacts/import", { preHandler: [app.authenticate] }, async (req, reply) => {
   const file = await req.file();
   if (!file || !file.filename.toLowerCase().endsWith(".csv")) return reply.code(400).send({ error: "Upload a CSV file" });
-  const raw = (await file.toBuffer()).toString("utf8");
-  const lines = raw.split(/\r?\n/).filter(Boolean);
-  if (lines.length < 2 || lines.length > 5001) return reply.code(400).send({ error: "CSV must contain a header and between 1 and 5000 contacts" });
-  const parseRow = (line: string) => line.split(",").map(x => x.trim().replace(/^"|"$/g, "").replace(/""/g, '"'));
-  const headers = parseRow(lines[0]).map(x => x.toLowerCase());
-  const phoneIndex = headers.indexOf("phone"), firstIndex = headers.indexOf("firstname") >= 0 ? headers.indexOf("firstname") : headers.indexOf("first_name");
-  if (phoneIndex < 0 || firstIndex < 0) return reply.code(400).send({ error: "CSV requires firstName and phone columns" });
+  const raw = (await file.toBuffer()).toString("utf8").replace(/^\uFEFF/, "");
+  // RFC-4180-style CSV parser: handles quoted commas, escaped quotes, and CRLFs.
+  const records: string[][] = [];
+  let row: string[] = [], field = "", quoted = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (quoted) {
+      if (ch === '"' && raw[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"' && field.length === 0) quoted = true;
+    else if (ch === ",") { row.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && raw[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      if (row.some(cell => cell.trim() !== "")) records.push(row);
+      row = [];
+    } else field += ch;
+    if (records.length > 5001) return reply.code(400).send({ error: "CSV may contain at most 5000 contacts" });
+  }
+  if (quoted) return reply.code(400).send({ error: "CSV has an unclosed quoted field" });
+  if (field.length || row.length) { row.push(field); if (row.some(cell => cell.trim() !== "")) records.push(row); }
+  if (records.length < 2 || records.length > 5001) return reply.code(400).send({ error: "CSV must contain a header and between 1 and 5000 contacts" });
+  const headers = records[0].map(x => x.trim().toLowerCase().replace(/\s+/g, ""));
+  const firstIndex = headers.indexOf("firstname") >= 0 ? headers.indexOf("firstname") : headers.indexOf("first_name");
   const lastIndex = headers.indexOf("lastname") >= 0 ? headers.indexOf("lastname") : headers.indexOf("last_name");
-  const emailIndex = headers.indexOf("email"), companyIndex = headers.indexOf("company");
-  const rows = lines.slice(1).map(line => parseRow(line)).filter(row => row[firstIndex] && row[phoneIndex]).map(row => ({
-    companyId: req.session.companyId, firstName: row[firstIndex].slice(0,100), lastName: lastIndex >= 0 ? (row[lastIndex] || "").slice(0,100) : "", phone: row[phoneIndex].slice(0,40), email: emailIndex >= 0 && row[emailIndex] ? row[emailIndex].slice(0,254) : null, companyName: companyIndex >= 0 ? (row[companyIndex] || "").slice(0,160) : null
-  }));
-  if (!rows.length) return reply.code(400).send({ error: "No valid rows found" });
+  const phoneIndex = headers.indexOf("phone"), emailIndex = headers.indexOf("email");
+  const companyIndex = headers.indexOf("company") >= 0 ? headers.indexOf("company") : headers.indexOf("companyname");
+  if (phoneIndex < 0 || firstIndex < 0) return reply.code(400).send({ error: "CSV requires firstName and phone columns. Optional columns: lastName, email, company." });
+  const rows = records.slice(1).map(cells => ({
+    companyId: req.session.companyId,
+    firstName: (cells[firstIndex] || "").trim().slice(0, 100),
+    lastName: lastIndex >= 0 ? (cells[lastIndex] || "").trim().slice(0, 100) : "",
+    phone: (cells[phoneIndex] || "").trim().slice(0, 40),
+    email: emailIndex >= 0 && (cells[emailIndex] || "").trim() ? (cells[emailIndex] || "").trim().slice(0, 254) : null,
+    companyName: companyIndex >= 0 ? (cells[companyIndex] || "").trim().slice(0, 160) || null : null
+  })).filter(x => x.firstName && x.phone);
+  if (!rows.length) return reply.code(400).send({ error: "No valid rows found. Every contact must have a first name and phone." });
   const result = await prisma.contact.createMany({ data: rows });
   await audit(req.session.companyId, req.session.sub, "contacts.imported", "Contact", undefined, { count: result.count });
   return reply.code(201).send({ imported: result.count });
