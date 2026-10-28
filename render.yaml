@@ -43,11 +43,6 @@ services:
         value: Your Company
       - key: CORS_ORIGIN
         value: https://realdesk-web.onrender.com
-      - key: API_UPSTREAM
-        fromService:
-          name: api
-          type: web
-          property: hostport
 
   - type: web
     name: realdesk-web
