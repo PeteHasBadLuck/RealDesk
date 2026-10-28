@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { saveEncryptedRecording, readEncryptedRecording } from "./recordings.js";
 
@@ -545,7 +545,7 @@ app.get("/api/recordings/:id/audio", { preHandler: [app.authenticate] }, async (
 function encryptLeadScoutSecret(value: string) {
   const secretKey = process.env.VOIP_ENCRYPTION_KEY;
   if (!secretKey || secretKey.length < 32) throw new Error("Server administrator must configure VOIP_ENCRYPTION_KEY (32+ characters).");
-  const key = Buffer.from(secretKey).subarray(0, 32);
+  const key = createHash("sha256").update(secretKey).digest();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
   const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
@@ -555,7 +555,7 @@ function decryptLeadScoutSecret(value: string) {
   const secretKey = process.env.VOIP_ENCRYPTION_KEY;
   if (!secretKey || secretKey.length < 32) throw new Error("Server encryption key is not configured.");
   const [ivText, tagText, encryptedText] = value.split(".");
-  const decipher = createDecipheriv("aes-256-gcm", Buffer.from(secretKey).subarray(0, 32), Buffer.from(ivText, "base64"));
+  const decipher = createDecipheriv("aes-256-gcm", createHash("sha256").update(secretKey).digest(), Buffer.from(ivText, "base64"));
   decipher.setAuthTag(Buffer.from(tagText, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
 }
