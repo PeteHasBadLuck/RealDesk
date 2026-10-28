@@ -6,16 +6,17 @@ import multipart from "@fastify/multipart";
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { saveEncryptedRecording, readEncryptedRecording } from "./recordings.js";
 
 const prisma = new PrismaClient();
-const app = Fastify({ logger: true, bodyLimit: 2_000_000 });
+const app = Fastify({ logger: true, bodyLimit: 110_000_000 });
 const PORT = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.length < 32) throw new Error("JWT_SECRET must be set to a random value of at least 32 characters.");
 await app.register(cors, { origin: (process.env.CORS_ORIGIN || "http://localhost:5173").split(","), credentials: true });
 await app.register(jwt, { secret: JWT_SECRET, sign: { expiresIn: "8h" } });
 await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
-await app.register(multipart, { limits: { fileSize: 5_000_000, files: 1 } });
+await app.register(multipart, { limits: { fileSize: 100_000_000, files: 1 } });
 
 type Session = { sub: string; companyId: string; role: Role; email: string };
 declare module "fastify" {
@@ -226,15 +227,31 @@ app.post("/api/calls/:id/recording", { preHandler: [app.authenticate] }, async (
   if (!voip?.recordingEnabled) return reply.code(403).send({ error: "Call recording is disabled by the company administrator" });
   if (!call.recordingConsent) return reply.code(400).send({ error: "Recording consent must be recorded before uploading audio" });
   const file = await req.file();
-  if (!file || !["audio/webm","audio/ogg","audio/wav","audio/mpeg"].includes(file.mimetype)) return reply.code(400).send({ error: "Unsupported audio format" });
+  if (!file || !["audio/webm","audio/ogg","audio/wav","audio/mpeg","audio/mp4"].includes(file.mimetype)) return reply.code(400).send({ error: "Unsupported audio format" });
   const buffer = await file.toBuffer();
-  if (buffer.length > 5_000_000) return reply.code(413).send({ error: "Recording exceeds 5 MB prototype upload limit; configure object storage for production" });
-  // Prototype storage uses a database record key only; production storage adapter is required before this endpoint is enabled.
-  return reply.code(501).send({ error: "Recording storage adapter is not configured. Add encrypted S3-compatible object storage before enabling recording uploads." });
+  if (buffer.length < 100 || buffer.length > 100_000_000) return reply.code(413).send({ error: "Recording must be between 100 bytes and 100 MB" });
+  try {
+    const recordingKey = await saveEncryptedRecording(req.session.companyId, callId, buffer);
+    const updated = await prisma.callRecord.update({ where: { id: callId }, data: { recordingKey, recordingMime: file.mimetype, recordingBytes: buffer.length } });
+    await audit(req.session.companyId, req.session.sub, "call.recording_uploaded", "CallRecord", callId, { bytes: buffer.length, mime: file.mimetype });
+    return reply.code(201).send({ ok: true, callId: updated.id, bytes: buffer.length });
+  } catch (error) {
+    req.log.error({ err: error }, "Recording storage failed");
+    return reply.code(503).send({ error: "Recording storage is unavailable; verify server encryption key and persistent storage" });
+  }
 });
 app.get("/api/recordings/:id/audio", { preHandler: [app.authenticate] }, async (req, reply) => {
-  if (!requireRole(req, reply, supervisorRoles)) return;
-  return reply.code(501).send({ error: "Recording playback requires the configured object-storage adapter." });
+  const callId = (req.params as any).id;
+  const call = await prisma.callRecord.findFirst({ where: { id: callId, companyId: req.session.companyId, recordingKey: { not: null }, ...(supervisorRoles.includes(req.session.role) ? {} : { agentId: req.session.sub }) } });
+  if (!call || !call.recordingKey) return reply.code(404).send({ error: "Recording not found" });
+  try {
+    const audio = await readEncryptedRecording(call.recordingKey);
+    await audit(req.session.companyId, req.session.sub, "call.recording_played", "CallRecord", callId);
+    return reply.header("Content-Type", call.recordingMime || "audio/webm").header("Content-Length", String(audio.length)).header("Cache-Control", "private, no-store").send(audio);
+  } catch (error) {
+    req.log.error({ err: error }, "Recording playback failed");
+    return reply.code(503).send({ error: "Recording file is unavailable or cannot be decrypted" });
+  }
 });
 app.get("/api/reports/summary", { preHandler: [app.authenticate] }, async req => {
   const companyId = req.session.companyId;
