@@ -6,7 +6,7 @@ RealDesk is an open-source, self-hosted contact-center application inspired by m
 
 ### Admin / supervisor
 - Company user accounts and roles
-- Campaign creation and contact-list management
+- Campaign creation, contact assignment to individual agents, and agent availability presence and contact-list management
 - VoIP configuration form with encrypted-at-rest credentials
 - Call history, dispositions, reporting and audit events
 - Call recording list and playback for authorized roles, using encrypted persistent files; retention controls still need completing
@@ -34,14 +34,14 @@ For self-hosting on a server you control, see [deployment instructions](docs/DEP
 
 ## Current implementation status
 
-This is an early working foundation, not a production-ready contact center yet.
+This is a substantial working foundation, but it is not yet a production-ready contact center. The CI workflow builds both containers and runs API integration smoke tests against PostgreSQL.
 
 Implemented in the repository:
 - Separate admin/supervisor and agent navigation
-- Password login and role checks
-- Company-scoped contacts, contact CRUD and CSV import/export
+- Company self-registration, password login, role checks, password changes, and server-side session revocation
+- Company-scoped contacts, contact CRUD, and CSV import/export for status, notes, do-not-call flags, and callback dates
 - Campaign creation
-- Call records and required call disposition endpoint
+- Call records, required call-ending reasons, scheduled callback times, and contact-specific call history
 - VoIP settings form and encrypted-at-rest credential storage
 - SIP-over-WebSocket/WebRTC outbound and inbound call client integration, pending provider-specific end-to-end validation
 - Consent-gated mixed local/remote browser audio capture when the SIP peer connection exposes both tracks
@@ -55,7 +55,7 @@ Not yet production-complete:
 - Provider-specific PBX validation and handling of telephony edge cases
 - Recording-quality validation across supported browsers/providers and legal-compliance review
 - Production-grade recording retention/deletion jobs and optional S3-compatible object storage adapter
-- Password reset, MFA, session revocation and comprehensive tests
+- Password reset, MFA, and a broader browser end-to-end / load-testing suite (API integration smoke tests now run in CI)
 - Production migration/backup/restore process
 - Telephony-provider-specific adapter and end-to-end validation
 
