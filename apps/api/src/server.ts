@@ -144,8 +144,11 @@ app.post("/api/contacts", { preHandler: [app.authenticate] }, async (req, reply)
 });
 app.patch("/api/contacts/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
   const p = contactSchema.partial().safeParse(req.body); if (!p.success || !Object.keys(p.data || {}).length) return reply.code(400).send({ error: "Invalid contact update" });
+  const id = (req.params as any).id;
+  const accessible = await prisma.contact.findFirst({ where: { id, companyId: req.session.companyId, ...(req.session.role === "AGENT" ? { AND: [{ OR: [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }] }] } : {}) } });
+  if (!accessible) return reply.code(404).send({ error: "Contact not found or not assigned to you" });
   const data: any = { ...p.data }; if (data.email === "") data.email = null;
-  const result = await prisma.contact.updateMany({ where: { id: (req.params as any).id, companyId: req.session.companyId }, data });
+  const result = await prisma.contact.updateMany({ where: { id, companyId: req.session.companyId }, data });
   if (!result.count) return reply.code(404).send({ error: "Contact not found" });
   await audit(req.session.companyId, req.session.sub, "contact.updated", "Contact", (req.params as any).id);
   return prisma.contact.findFirst({ where: { id: (req.params as any).id, companyId: req.session.companyId } });
@@ -258,8 +261,8 @@ app.post("/api/calls", { preHandler: [app.authenticate] }, async (req, reply) =>
   const p = z.object({ contactId: z.string().optional(), direction: z.enum(["INBOUND","OUTBOUND"]), providerCallId: z.string().max(200).optional(), recordingConsent: z.boolean().default(false) }).safeParse(req.body);
   if (!p.success) return reply.code(400).send({ error: "Invalid call details" });
   if (p.data.contactId) {
-    const contact = await prisma.contact.findFirst({ where: { id: p.data.contactId, companyId: req.session.companyId } });
-    if (!contact) return reply.code(404).send({ error: "Contact not found" });
+    const contact = await prisma.contact.findFirst({ where: { id: p.data.contactId, companyId: req.session.companyId, ...(req.session.role === "AGENT" ? { AND: [{ OR: [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }] }] } : {}) } });
+    if (!contact) return reply.code(404).send({ error: "Contact not found or not assigned to you" });
     if (p.data.direction === "OUTBOUND" && (contact.doNotCall || contact.status === "DO_NOT_CALL")) return reply.code(403).send({ error: "Outbound calling is blocked for this contact (do-not-call)" });
   }
   const call = await prisma.callRecord.create({ data: { ...p.data, companyId: req.session.companyId, agentId: req.session.sub, status: "INITIATED" } });
