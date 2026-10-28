@@ -66,7 +66,7 @@ app.post("/api/auth/register-company", { config: { rateLimit: { max: 3, timeWind
           passwordHash: await bcrypt.hash(parsed.data.password, 12),
           role: "OWNER"
         },
-        select: { id: true, name: true, email: true, role: true, sessionVersion: true, company: { select: { name: true } } }
+        select: { id: true, name: true, email: true, role: true, presence: true, sessionVersion: true, company: { select: { name: true } } }
       });
       return { company, user };
     });
@@ -88,10 +88,10 @@ app.post("/api/auth/login", { config: { rateLimit: { max: 8, timeWindow: "1 minu
     return reply.code(401).send({ error: "Invalid credentials" });
   const user = candidates[0];
   const token = app.jwt.sign({ sub: user.id, companyId: user.companyId, role: user.role, email: user.email, sessionVersion: user.sessionVersion });
-  return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, company: { name: user.company.name } } };
+  return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, presence: user.presence, company: { name: user.company.name } } };
 });
 app.get("/api/auth/me", { preHandler: [app.authenticate] }, async req => {
-  const user = await prisma.user.findFirstOrThrow({ where: { id: req.session.sub, companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, company: { select: { name: true } } } });
+  const user = await prisma.user.findFirstOrThrow({ where: { id: req.session.sub, companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, presence: true, company: { select: { name: true } } } });
   return { user };
 });
 app.post("/api/auth/change-password", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -112,8 +112,8 @@ app.post("/api/auth/logout", { preHandler: [app.authenticate] }, async (req, rep
 
 app.get("/api/users", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, supervisorRoles)) return;
-  const users = await prisma.user.findMany({ where: { companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, active: true, sipUsername: true, sipDomain: true, encryptedSipSecret: true, createdAt: true }, orderBy: { createdAt: "desc" } });
-  return users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, hasSipCredentials: Boolean(u.encryptedSipSecret), sipUsername: u.sipUsername, sipDomain: u.sipDomain, createdAt: u.createdAt }));
+  const users = await prisma.user.findMany({ where: { companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, active: true, presence: true, sipUsername: true, sipDomain: true, encryptedSipSecret: true, createdAt: true }, orderBy: { createdAt: "desc" } });
+  return users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active, presence: u.presence, hasSipCredentials: Boolean(u.encryptedSipSecret), sipUsername: u.sipUsername, sipDomain: u.sipDomain, createdAt: u.createdAt }));
 });
 app.post("/api/users", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, adminRoles)) return;
@@ -173,7 +173,7 @@ app.patch("/api/users/:id", { preHandler: [app.authenticate] }, async (req, repl
   const existing = await prisma.user.findFirst({ where: { id, companyId: req.session.companyId } });
   if (!existing) return reply.code(404).send({ error: "User not found" });
   const data: any = {};
-  if (p.active !== undefined) data.active = p.active;
+  if (p.active !== undefined) { data.active = p.active; if (!p.active) data.presence = "OFFLINE"; }
   if (p.role !== undefined) data.role = p.role;
   if (p.name !== undefined) data.name = p.name;
   let sipUpdated = false;
@@ -206,6 +206,14 @@ app.patch("/api/users/:id", { preHandler: [app.authenticate] }, async (req, repl
   return { ok: true };
 });
 
+app.patch("/api/agents/presence", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (req.session.role !== "AGENT") return reply.code(403).send({ error: "Only call-agent accounts can update agent presence." });
+  const p = z.object({ presence: z.enum(["OFFLINE","AVAILABLE","AWAY","ON_BREAK"]) }).safeParse(req.body);
+  if (!p.success) return reply.code(400).send({ error: "Choose Available, Away, On break, or Offline." });
+  const updated = await prisma.user.update({ where: { id: req.session.sub }, data: { presence: p.data.presence }, select: { id: true, presence: true } });
+  await audit(req.session.companyId, req.session.sub, "agent.presence_changed", "User", updated.id, { presence: updated.presence });
+  return updated;
+});
 app.get("/api/contacts/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
   const id = (req.params as any).id;
   const contact = await prisma.contact.findFirst({
