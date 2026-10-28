@@ -9,12 +9,12 @@ RealDesk is an open-source, self-hosted contact-center application inspired by m
 - Campaign creation and contact-list management
 - VoIP configuration form with encrypted-at-rest credentials
 - Call history, dispositions, reporting and audit events
-- Recording access UI (requires production storage adapter)
+- Call recording list and playback for authorized roles, using encrypted persistent files; retention controls still need completing
 
 ### Call agent
 - Sign-in and role-based workspace
 - Contact search, add/edit, CSV import and export
-- Microphone permission request
+- SIP phone registration, incoming call answer/reject, and outbound calling through JsSIP/WebRTC
 - Call record creation and mandatory ending-reason workflow
 - Callback, interest, no-answer, wrong-number, sale and do-not-call dispositions
 - Agent-scoped call history
@@ -43,21 +43,23 @@ Implemented in the repository:
 - Campaign creation
 - Call records and required call disposition endpoint
 - VoIP settings form and encrypted-at-rest credential storage
-- SIP-over-WebSocket/WebRTC outbound call client integration, pending provider-specific end-to-end validation
-- Consent-gated mixed local/remote browser audio capture when the SIP peer connection exposes both streams
+- SIP-over-WebSocket/WebRTC outbound and inbound call client integration, pending provider-specific end-to-end validation
+- Consent-gated mixed local/remote browser audio capture when the SIP peer connection exposes both tracks
+- Per-agent SIP credential fields encrypted at rest, with a company-level fallback configuration
+- Separate admin and agent portal entrypoints (`/admin.html` and `/agent.html`)
 - AES-256-GCM encrypted recording files on persistent server storage, plus role-checked playback API
 - Audit log and call summary endpoints
 - Docker-based frontend/API/PostgreSQL deployment definitions
 
 Not yet production-complete:
-- Inbound-call UX and provider-specific PBX validation (outbound SIP/WebRTC client is scaffolded)
-- Real call-media capture/recording pipeline
+- Provider-specific PBX validation and handling of telephony edge cases
+- Recording-quality validation across supported browsers/providers and legal-compliance review
 - Production-grade recording retention/deletion jobs and optional S3-compatible object storage adapter
 - Password reset, MFA, session revocation and comprehensive tests
 - Production migration/backup/restore process
 - Telephony-provider-specific adapter and end-to-end validation
 
-The current browser microphone check is not the same as connecting a phone call. The browser's local microphone audio is not a complete recording of both sides of a real call. Recording endpoints intentionally remain disabled until secure object storage is implemented. Do not enter real customer data or expose this version publicly until the outstanding security and telephony work is complete.
+The agent desktop uses SIP over secure WebSocket and WebRTC media; it requires a compatible PBX/provider, HTTPS, suitable NAT traversal (STUN/TURN), and provider-specific configuration. The browser recording path encrypts captured WebRTC audio on server storage, but verify that both sides are present with your actual PBX and browser before relying on recordings. Retention/deletion automation, database backup/restore, external security review, and jurisdiction-specific recording-compliance review remain incomplete. Do not use this version for real customer data until these checks are complete.
 
 ## Security
 
