@@ -149,13 +149,53 @@ app.post("/api/users", { preHandler: [app.authenticate] }, async (req, reply) =>
 });
 app.patch("/api/users/:id", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, adminRoles)) return;
-  const p = z.object({ active: z.boolean().optional(), role: z.enum(["ADMIN", "SUPERVISOR", "AGENT"]).optional(), name: z.string().min(1).max(120).optional() }).safeParse(req.body);
-  if (!p.success || Object.keys(p.data || {}).length === 0) return reply.code(400).send({ error: "Invalid update" });
+  const schema = z.object({
+    active: z.boolean().optional(),
+    role: z.enum(["ADMIN", "SUPERVISOR", "AGENT"]).optional(),
+    name: z.string().min(1).max(120).optional(),
+    sipUsername: z.string().max(255).optional(),
+    sipDomain: z.string().max(255).optional(),
+    sipPassword: z.string().max(500).optional(),
+    clearSipCredentials: z.boolean().optional()
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success || Object.keys(parsed.data || {}).length === 0) return reply.code(400).send({ error: "Invalid update" });
+  const p = parsed.data;
   const id = (req.params as any).id;
-  if (id === req.session.sub) return reply.code(400).send({ error: "Use another administrator to change your own role or active state" });
-  const result = await prisma.user.updateMany({ where: { id, companyId: req.session.companyId }, data: p.data });
-  if (!result.count) return reply.code(404).send({ error: "User not found" });
-  await audit(req.session.companyId, req.session.sub, "user.updated", "User", id);
+  if (id === req.session.sub && (p.role !== undefined || p.active !== undefined)) return reply.code(400).send({ error: "Use another administrator to change your own role or active state" });
+  if (p.clearSipCredentials && p.sipPassword) return reply.code(400).send({ error: "Choose either a new SIP password or clearing the SIP profile." });
+  const existing = await prisma.user.findFirst({ where: { id, companyId: req.session.companyId } });
+  if (!existing) return reply.code(404).send({ error: "User not found" });
+  const data: any = {};
+  if (p.active !== undefined) data.active = p.active;
+  if (p.role !== undefined) data.role = p.role;
+  if (p.name !== undefined) data.name = p.name;
+  let sipUpdated = false;
+  if (p.clearSipCredentials) {
+    data.sipUsername = null; data.sipDomain = null; data.encryptedSipSecret = null; sipUpdated = true;
+  } else if (p.sipPassword) {
+    const sipUsername = p.sipUsername ?? existing.sipUsername;
+    const sipDomain = p.sipDomain ?? existing.sipDomain;
+    if (!sipUsername || !sipDomain) return reply.code(400).send({ error: "SIP username and domain are required to set an extension password." });
+    const secretKey = process.env.VOIP_ENCRYPTION_KEY;
+    if (!secretKey || secretKey.length < 32) return reply.code(503).send({ error: "Server administrator must configure VOIP_ENCRYPTION_KEY before storing credentials." });
+    const crypto = await import("node:crypto");
+    const key = crypto.createHash("sha256").update(secretKey).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    const encrypted = Buffer.concat([cipher.update(p.sipPassword, "utf8"), cipher.final()]);
+    data.sipUsername = sipUsername; data.sipDomain = sipDomain;
+    data.encryptedSipSecret = [iv.toString("base64"), cipher.getAuthTag().toString("base64"), encrypted.toString("base64")].join(".");
+    sipUpdated = true;
+  } else if (p.sipUsername !== undefined || p.sipDomain !== undefined) {
+    const sipUsername = p.sipUsername ?? existing.sipUsername;
+    const sipDomain = p.sipDomain ?? existing.sipDomain;
+    if (!existing.encryptedSipSecret && (p.sipUsername || p.sipDomain)) return reply.code(400).send({ error: "Enter a SIP password too, or clear the dedicated profile to use the company login." });
+    data.sipUsername = sipUsername; data.sipDomain = sipDomain; sipUpdated = true;
+  }
+  if (!Object.keys(data).length) return reply.code(400).send({ error: "No changes supplied" });
+  await prisma.user.update({ where: { id }, data });
+  await audit(req.session.companyId, req.session.sub, "user.updated", "User", id, { activeChanged: p.active !== undefined, roleChanged: p.role !== undefined, sipUpdated });
   return { ok: true };
 });
 
