@@ -27,6 +27,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-realdesk}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-realdesk}?schema=public
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       VOIP_ENCRYPTION_KEY: ${VOIP_ENCRYPTION_KEY:?Set VOIP_ENCRYPTION_KEY in .env}
+      RECORDING_ENCRYPTION_KEY: ${RECORDING_ENCRYPTION_KEY:?Set RECORDING_ENCRYPTION_KEY in .env}
+      RECORDINGS_DIR: /data/recordings
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
@@ -35,6 +37,8 @@ services:
       db:
         condition: service_healthy
     expose: ["3001"]
+    volumes:
+      - realdesk-recordings:/data/recordings
     networks: [private]
   web:
     build:
@@ -48,6 +52,7 @@ services:
     networks: [private]
 volumes:
   realdesk-postgres:
+  realdesk-recordings:
 networks:
   private:
     driver: bridge
