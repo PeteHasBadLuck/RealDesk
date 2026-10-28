@@ -245,7 +245,20 @@ async function main() {
   const audit = await call("/api/audit", { token: owner.token });
   assert.ok(audit.data.some(event => event.action === "call.recording_played"));
   assert.ok(audit.data.some(event => event.action === "call.finished"));
-  console.log("RealDesk API smoke tests passed: login, role checks, SIP secret encryption, ICE configuration, contact assignment, DNC, dispositions, encrypted recording upload/playback, scheduled callbacks, and audit log.");
+
+  const oldAgent2Token = agent2Login.token;
+  const changedPassword = await call("/api/auth/change-password", {
+    method: "POST", token: oldAgent2Token,
+    body: { currentPassword: "CI_Agent_Password_1002_9284!", newPassword: "CI_Agent_Password_1002_Rotated_9284!" }
+  });
+  assert.ok(changedPassword.data.token, "password change should return a new session token");
+  await call("/api/contacts", { token: oldAgent2Token, expected: 401 });
+  await call("/api/contacts", { token: changedPassword.data.token });
+  const freshAgent2Login = await login("agent2@realdesk.test", "CI_Agent_Password_1002_Rotated_9284!");
+  await call("/api/auth/logout", { method: "POST", token: freshAgent2Login.token });
+  await call("/api/contacts", { token: freshAgent2Login.token, expected: 401 });
+
+  console.log("RealDesk API smoke tests passed: company signup/isolation, login, roles, SIP secrets, ICE, campaign assignments, DNC/wrong-number, scheduled callbacks, encrypted recording upload/playback, password rotation, logout revocation, and audit log.");
 }
 
 main().catch(error => {
