@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Activity, AudioLines, BarChart3, BriefcaseBusiness, CalendarClock, Check, ChevronDown, CircleHelp, ContactRound, Headphones, KeyRound, LogOut, Menu, Mic, Phone, PhoneCall, Play, Plus, Search, Settings, ShieldCheck, Square, Users, Volume2, X } from "lucide-react";
 
 type User = { id:string; name:string; email:string; role:string; company?:{name:string}; companyName?:string };
@@ -39,7 +39,7 @@ export default function App(){
  useEffect(()=>{if(user){setSection(user.role==="AGENT"?"Agent desktop":"Overview");}},[user?.id]);
  useEffect(()=>{if(user)refresh();},[user?.id]);
  const visibleContacts=useMemo(()=>contacts.filter(c=>[c.firstName,c.lastName,c.phone,c.email,c.companyName,c.status].join(" ").toLowerCase().includes(query.toLowerCase())&&(section!=="Callbacks"||c.status==="CALLBACK")), [contacts,query,section]);
- async function login(e:React.FormEvent){e.preventDefault();setLoading(true);setLoginError("");try{const result=await request<any>("/api/auth/login",{method:"POST",body:JSON.stringify({email,password})});localStorage.setItem("realdesk.token",result.token);setUser(result.user);setPassword("");}catch(err:any){setLoginError(err.message)}finally{setLoading(false)}}
+ async function login(e:FormEvent){e.preventDefault();setLoading(true);setLoginError("");try{const result=await request<any>("/api/auth/login",{method:"POST",body:JSON.stringify({email,password})});localStorage.setItem("realdesk.token",result.token);setUser(result.user);setPassword("");}catch(err:any){setLoginError(err.message)}finally{setLoading(false)}}
  function logout(){localStorage.removeItem("realdesk.token");setUser(null);setContacts([]);setCalls([]);setSection("Agent desktop");}
  async function saveContact(e:React.FormEvent){e.preventDefault();try{const path=form.id?"/api/contacts/"+form.id:"/api/contacts";const c=await request<Contact>(path,{method:form.id?"PATCH":"POST",body:JSON.stringify(form)});setContacts(old=>form.id?old.map(x=>x.id===c.id?c:x):[c,...old]);setSelected(c);setShowContact(false);flash("Contact saved");}catch(err:any){flash(err.message)}}
  async function importCsv(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];if(!file)return;const fd=new FormData();fd.append("file",file);try{const r=await request<any>("/api/contacts/import",{method:"POST",body:fd});flash("Imported "+r.imported+" contacts");await refresh()}catch(err:any){flash(err.message)}e.target.value=""}
@@ -94,7 +94,7 @@ export default function App(){
  async function stopCall(){
   if(finishOpenRef.current)return;
   finishOpenRef.current=true;
-  try{if(sessionRef.current&&sessionRef.current.isEstablished?.())sessionRef.current.terminate()}catch{}
+  try{sessionRef.current?.terminate()}catch{}
   if(recorderRef.current?.state==="recording"){
    await new Promise<void>(resolve=>{const recorder=recorderRef.current!;recorder.onstop=()=>{setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));resolve()};recorder.stop()});
   }
