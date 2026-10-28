@@ -60,7 +60,7 @@ export default function App(){
    ua.on("registrationFailed",()=>flash("SIP registration failed. Check the PBX credentials, WSS URL, and WebRTC configuration."));
    ua.on("disconnected",()=>flash("SIP connection disconnected."));
    ua.start();
-   const session=ua.call(contact.phone,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:[]},rtcOfferConstraints:{offerToReceiveAudio:true}});
+   const session=ua.call(contact.phone,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
    sessionRef.current=session;
    finishOpenRef.current=false;
    setSelected(contact);setActiveCall(call);setCallStarted(Date.now());setSection("Agent desktop");setMuted(false);setRecordedBlob(null);setRecording(false);setRecordingEnabled(!!config.recordingEnabled);
