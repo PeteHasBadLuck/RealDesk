@@ -23,7 +23,7 @@ docker compose ps
 docker compose logs -f api
 ```
 
-5. Visit `http://localhost:8080` on the host, or use your HTTPS domain when a reverse proxy is configured.
+5. Visit `http://localhost:8080` on the host, or use your HTTPS domain when a reverse proxy is configured. The dedicated portals are `/admin.html` and `/agent.html`; successful login redirects users according to their role.
 6. Optional seed settings create an initial OWNER user on first startup. If they are blank, no login account is created. Never use example passwords.
 
 The current container runs Prisma schema synchronization at startup for this early stage. Before production upgrades, review schema changes and implement a controlled migration/backup/rollback process.
@@ -44,7 +44,7 @@ The current container runs Prisma schema synchronization at startup for this ear
 The repository includes a React web application, Fastify API, PostgreSQL data model, login and roles, contact CRUD/CSV import, campaigns, call records and dispositions, encrypted-at-rest VoIP credentials, and admin screens.
 
 Outbound SIP-over-WebSocket/WebRTC calling and consent-gated mixed audio capture are wired into the agent UI, but the integration must be validated against your specific PBX/provider. Inbound-call handling, retention/deletion automation, provider-specific edge cases and a production security review remain incomplete. Recording files are AES-256-GCM encrypted on persistent storage and playback is role-checked; verify that both call participants are captured before relying on recordings.
-## Deploy online without using your laptop as a server
+## Deploy online without installing anything locally
 
 The repository includes `render.yaml` for a hosted deployment. On a device with a browser:
 
@@ -56,3 +56,8 @@ The repository includes `render.yaml` for a hosted deployment. On a device with 
 6. Configure a compatible SIP/WebRTC provider in **VoIP settings**. Use a secure `wss://` WebSocket URL and a PBX/provider configured for browser WebRTC audio. A provider account that only offers traditional SIP credentials without WebSocket/WebRTC support will not work directly from the browser.
 
 Hosted deployment requires configuring the environment variables and provider, but does not require installing developer tools on your personal computer. The application is still under active development and should not be used with real customer data until the outstanding telephony, security, and legal checks are complete.
+
+
+## Hosting costs and limitations
+
+The Render blueprint separates the API and web front end and requests persistent disk storage for recordings. Render may require paid web-service/disk plans for this setup; review the resource plan and charges in Render before pressing Deploy. The sample database plan is intended for evaluation only and should be upgraded to a durable paid database before real customer data is used. No service has been deployed to your Render account by this repository change alone.
