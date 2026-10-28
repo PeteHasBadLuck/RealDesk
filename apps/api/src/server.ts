@@ -44,6 +44,41 @@ function audit(companyId: string, actorId: string, action: string, entity: strin
 const loginSchema = z.object({ email: z.string().email().max(254), password: z.string().min(1).max(200) });
 app.get("/health", async () => ({ ok: true, service: "realdesk-api" }));
 
+app.post("/api/auth/register-company", { config: { rateLimit: { max: 3, timeWindow: "1 hour" } } }, async (req, reply) => {
+  const parsed = z.object({
+    companyName: z.string().trim().min(2).max(160),
+    name: z.string().trim().min(1).max(120),
+    email: z.string().trim().email().max(254),
+    password: z.string().min(14).max(200)
+  }).safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: "Enter a company name, your name, a valid email, and a password with at least 14 characters." });
+  const email = parsed.data.email.toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) return reply.code(409).send({ error: "An account already exists for that email. Sign in or use another email." });
+  try {
+    const created = await prisma.$transaction(async tx => {
+      const company = await tx.company.create({ data: { name: parsed.data.companyName } });
+      const user = await tx.user.create({
+        data: {
+          companyId: company.id,
+          name: parsed.data.name,
+          email,
+          passwordHash: await bcrypt.hash(parsed.data.password, 12),
+          role: "OWNER"
+        },
+        select: { id: true, name: true, email: true, role: true, company: { select: { name: true } } }
+      });
+      return { company, user };
+    });
+    const token = app.jwt.sign({ sub: created.user.id, companyId: created.company.id, role: created.user.role, email: created.user.email });
+    await audit(created.company.id, created.user.id, "company.registered", "Company", created.company.id);
+    return reply.code(201).send({ token, user: created.user });
+  } catch (error: any) {
+    if (error?.code === "P2002") return reply.code(409).send({ error: "An account already exists for that email." });
+    req.log.error({ err: error }, "Company registration failed");
+    return reply.code(500).send({ error: "Could not create company workspace. Please retry." });
+  }
+});
 app.post("/api/auth/login", { config: { rateLimit: { max: 8, timeWindow: "1 minute" } } }, async (req, reply) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) return reply.code(400).send({ error: "Enter a valid email and password" });
