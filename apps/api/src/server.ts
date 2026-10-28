@@ -243,13 +243,15 @@ app.post("/api/calls/:id/recording", { preHandler: [app.authenticate] }, async (
   if (!voip?.recordingEnabled) return reply.code(403).send({ error: "Call recording is disabled by the company administrator" });
   if (!call.recordingConsent) return reply.code(400).send({ error: "Recording consent must be recorded before uploading audio" });
   const file = await req.file();
-  if (!file || !["audio/webm","audio/ogg","audio/wav","audio/mpeg","audio/mp4"].includes(file.mimetype)) return reply.code(400).send({ error: "Unsupported audio format" });
+  if (!file) return reply.code(400).send({ error: "Audio file is required" });
+  const mime = file.mimetype.split(";")[0].trim().toLowerCase();
+  if (!["audio/webm","audio/ogg","audio/wav","audio/mpeg","audio/mp4"].includes(mime)) return reply.code(400).send({ error: "Unsupported audio format" });
   const buffer = await file.toBuffer();
   if (buffer.length < 100 || buffer.length > 100_000_000) return reply.code(413).send({ error: "Recording must be between 100 bytes and 100 MB" });
   try {
     const recordingKey = await saveEncryptedRecording(req.session.companyId, callId, buffer);
-    const updated = await prisma.callRecord.update({ where: { id: callId }, data: { recordingKey, recordingMime: file.mimetype, recordingBytes: buffer.length } });
-    await audit(req.session.companyId, req.session.sub, "call.recording_uploaded", "CallRecord", callId, { bytes: buffer.length, mime: file.mimetype });
+    const updated = await prisma.callRecord.update({ where: { id: callId }, data: { recordingKey, recordingMime: mime, recordingBytes: buffer.length } });
+    await audit(req.session.companyId, req.session.sub, "call.recording_uploaded", "CallRecord", callId, { bytes: buffer.length, mime });
     return reply.code(201).send({ ok: true, callId: updated.id, bytes: buffer.length });
   } catch (error) {
     req.log.error({ err: error }, "Recording storage failed");
