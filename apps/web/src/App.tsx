@@ -144,13 +144,25 @@ export default function App(){
  }
  async function answerIncoming(){
   const invite=incomingInviteRef.current;if(!invite)return;
+  let call:Call|null=null;
   try{
-   const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:recordConsent})});
+   call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:recordConsent})});
    incomingInviteRef.current=null;setIncomingInvite(null);wireSession(invite.session,call,invite.contact,invite.config,recordConsent);
    invite.session.answer({mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:invite.config.iceServers?.length?invite.config.iceServers:[{urls:"stun:stun.l.google.com:19302"}]}});
    flash("Answering incoming call…");
-  }catch(err:any){flash(err.message||"Could not answer call");try{invite.session.terminate()}catch{}incomingInviteRef.current=null;setIncomingInvite(null)}
- }
+  }catch(err:any){
+   finishOpenRef.current=true;
+   try{invite.session.terminate()}catch{}
+   if(call){
+    try{
+     const failed=await request<Call>("/api/calls/"+call.id+"/finish",{method:"PATCH",body:JSON.stringify({disposition:"OTHER",notes:"Incoming call setup failed: "+(err.message||"unknown error"),durationSec:0,status:"FAILED"})});
+     setCalls(old=>[failed,...old.filter(item=>item.id!==failed.id)]);
+    }catch{}
+    setActiveCall(null);setCallStarted(null);setRecordedBlob(null);setRecording(false);sessionRef.current=null;
+   }
+   incomingInviteRef.current=null;setIncomingInvite(null);flash(err.message||"Could not answer call");
+  }
+}
  async function rejectIncoming(){
   const invite=incomingInviteRef.current;if(!invite)return;
   incomingInviteRef.current=null;setIncomingInvite(null);try{invite.session.terminate()}catch{}
@@ -163,16 +175,26 @@ export default function App(){
  async function startCall(contact:Contact,direction:"OUTBOUND"|"INBOUND"="OUTBOUND"){
   if(contact.doNotCall||contact.status==="DO_NOT_CALL"||contact.status==="WRONG_NUMBER"){flash(contact.status==="WRONG_NUMBER"?"This contact was marked as a wrong number. Update the phone number before calling again.":"This contact is on the do-not-call list.");return}
   if(!window.isSecureContext){flash("Calling requires HTTPS (or localhost) so the browser can access the microphone.");return}
+  let call:Call|null=null;
+  let session:any=null;
   try{
    const config=await getPhoneConfig();
    const ua=await ensurePhone(config);
-   const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:contact.id,direction,recordingConsent:recordConsent})});
+   call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:contact.id,direction,recordingConsent:recordConsent})});
    const target="sip:"+contact.phone.replace(/[^\d+*#]/g,"")+"@"+config.sipDomain;
-   const session=ua.call(target,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:config.iceServers?.length?config.iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
+   session=ua.call(target,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:config.iceServers?.length?config.iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
    wireSession(session,call,contact,config,recordConsent);
    flash("Calling "+contact.firstName+"…");
-  }catch(err:any){flash(err.name==="NotAllowedError"?"Microphone permission was denied. Allow microphone access in your browser.":err.message||"Could not start call")}
- }
+  }catch(err:any){
+   if(call&&!session){
+    try{
+     const failed=await request<Call>("/api/calls/"+call.id+"/finish",{method:"PATCH",body:JSON.stringify({disposition:"OTHER",notes:"Call setup failed: "+(err.message||"unknown error"),durationSec:0,status:"FAILED"})});
+     setCalls(old=>[failed,...old.filter(item=>item.id!==failed.id)]);
+    }catch{}
+   }
+   flash(err.name==="NotAllowedError"?"Microphone permission was denied. Allow microphone access in your browser.":err.message||"Could not start call");
+  }
+}
  async function stopCall(){
   if(finishOpenRef.current)return;
   finishOpenRef.current=true;
