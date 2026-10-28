@@ -118,6 +118,7 @@ model VoipConfig {
   sipDomain           String
   sipUsername         String
   encryptedSecret     String
+  encryptedIceServers String?
   outboundCallerId    String?
   websocketUrl        String?
   recordingEnabled    Boolean  @default(false)
