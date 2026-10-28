@@ -190,8 +190,9 @@ app.patch("/api/users/:id", { preHandler: [app.authenticate] }, async (req, repl
   } else if (p.sipUsername !== undefined || p.sipDomain !== undefined) {
     const sipUsername = p.sipUsername ?? existing.sipUsername;
     const sipDomain = p.sipDomain ?? existing.sipDomain;
+    if (existing.encryptedSipSecret && (!sipUsername || !sipDomain)) return reply.code(400).send({ error: "SIP username and domain cannot be blank while a dedicated password is saved." });
     if (!existing.encryptedSipSecret && (p.sipUsername || p.sipDomain)) return reply.code(400).send({ error: "Enter a SIP password too, or clear the dedicated profile to use the company login." });
-    data.sipUsername = sipUsername; data.sipDomain = sipDomain; sipUpdated = true;
+    data.sipUsername = sipUsername || null; data.sipDomain = sipDomain || null; sipUpdated = true;
   }
   if (!Object.keys(data).length) return reply.code(400).send({ error: "No changes supplied" });
   await prisma.user.update({ where: { id }, data });
