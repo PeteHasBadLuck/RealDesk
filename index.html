@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>RealDesk — Lead workspace</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#18221f;background:#f5f7f5;font-synthesis:none;text-rendering:optimizeLegibility}
+*{box-sizing:border-box}body{margin:0}button,input,select,textarea{font:inherit}button{cursor:pointer}.app{min-height:100vh;display:grid;grid-template-columns:238px 1fr}.sidebar{background:#172c26;color:#eaf3ed;padding:26px 16px;display:flex;flex-direction:column;gap:28px}.brand{font-size:21px;font-weight:750;letter-spacing:-.7px;padding:0 10px}.brand span{color:#8ee0ae}.workspace{font-size:12px;color:#a9bdb3;padding:0 10px;margin-top:7px}.nav{display:grid;gap:6px}.nav button{border:0;color:#c5d4cc;background:transparent;text-align:left;padding:11px 12px;border-radius:9px}.nav button.active,.nav button:hover{background:#29463b;color:white}.nav .sub{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#7f9c8d;padding:10px 12px 4px}.sidebar-foot{margin-top:auto;font-size:12px;color:#9bb2a5;padding:10px}.main{min-width:0;padding:32px clamp(18px,4vw,54px)}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:30px}.eyebrow{font-size:12px;color:#65766c;letter-spacing:.1em;text-transform:uppercase;font-weight:700}.top h1{font-size:30px;letter-spacing:-1.1px;margin:8px 0 0}.actions{display:flex;gap:10px;align-items:center}.btn{border:1px solid #d6dfd9;background:white;padding:10px 14px;border-radius:9px;color:#273830;font-weight:650}.btn.primary{background:#1d4936;color:white;border-color:#1d4936}.btn:hover{filter:brightness(.97)}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:28px}.stat{background:white;border:1px solid #e2e9e4;border-radius:13px;padding:18px}.stat-label{font-size:12px;color:#708076}.stat-value{font-size:27px;font-weight:750;letter-spacing:-.8px;margin:9px 0 3px}.stat-note{font-size:12px;color:#6f8478}.panel{border:1px solid #e0e8e2;background:white;border-radius:14px;overflow:hidden}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:19px 20px;border-bottom:1px solid #e7ede8}.panel-title{font-weight:750;font-size:16px}.panel-sub{font-size:12px;color:#718076;margin-top:4px}.tools{display:flex;gap:8px;align-items:center}.search{width:min(260px,35vw);border:1px solid #dbe4dd;border-radius:8px;padding:9px 11px;outline-color:#478765}.filter{border:1px solid #dbe4dd;border-radius:8px;padding:9px;background:white;color:#3f5046}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap}th{text-align:left;padding:12px 20px;background:#fafcfb;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#75847a;font-weight:700}td{padding:15px 20px;border-top:1px solid #edf1ee;font-size:13px;color:#34453b}tbody tr:hover{background:#fbfdfb}.person{display:flex;align-items:center;gap:11px}.avatar{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#e1eee5;color:#2f6548;font-weight:750;font-size:11px}.person-name{font-weight:700;color:#20362a}.company{font-size:11px;color:#7a887e;margin-top:3px}.pill{display:inline-flex;padding:5px 8px;border-radius:20px;font-size:11px;font-weight:650}.pill.new{background:#e7f1ff;color:#245b9c}.pill.qualified{background:#e6f5eb;color:#236540}.pill.proposal{background:#fff0d8;color:#925a05}.pill.negotiation{background:#f0e8ff;color:#6841a5}.pill.won{background:#dff5ec;color:#17684b}.source{color:#738278}.empty{padding:40px;text-align:center;color:#728176}.footer{padding:14px 20px;color:#819087;font-size:12px;border-top:1px solid #edf1ee;display:flex;justify-content:space-between}.modal-backdrop{position:fixed;inset:0;background:#12251d88;display:none;align-items:center;justify-content:center;padding:18px;z-index:5}.modal-backdrop.open{display:flex}.modal{width:min(540px,100%);max-height:92vh;overflow:auto;background:white;border-radius:16px;padding:24px;box-shadow:0 20px 70px #12251d35}.modal h2{margin:0 0 5px;letter-spacing:-.5px}.modal p{margin:0 0 20px;font-size:13px;color:#6d7b72}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.field{display:grid;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;font-weight:700;color:#526258}.field input,.field select,.field textarea{width:100%;padding:10px;border:1px solid #d8e1da;border-radius:8px;background:white;outline-color:#478765}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.notice{font-size:12px;color:#7a887e;margin-top:14px;line-height:1.5}@media(max-width:950px){.app{grid-template-columns:190px 1fr}.stats{grid-template-columns:repeat(2,1fr)}.main{padding:24px 18px}}@media(max-width:650px){.app{display:block}.sidebar{padding:14px 16px;gap:10px}.sidebar-top{display:flex;align-items:center;justify-content:space-between}.workspace{margin:0}.nav{display:flex;overflow:auto}.nav button{white-space:nowrap}.nav .sub,.sidebar-foot{display:none}.top{align-items:flex-start;flex-direction:column}.actions{width:100%}.stats{gap:8px}.stat{padding:13px}.stat-value{font-size:23px}.panel-head{align-items:flex-start;flex-direction:column}.tools{width:100%}.search{width:100%;min-width:0;flex:1}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="sidebar-top"><div class="brand">Real<span>Desk</span><div class="workspace">YOUR SALES WORKSPACE</div></div></div>
+  <nav class="nav" aria-label="Main navigation">
+    <div class="sub">Workspace</div>
+    <button class="active" data-view="Leads">▦ &nbsp; Leads</button>
+    <button data-view="Companies">▤ &nbsp; Companies</button>
+    <button data-view="Tasks">✓ &nbsp; Tasks</button>
+    <button data-view="Reports">▥ &nbsp; Reports</button>
+    <div class="sub">Manage</div>
+    <button data-view="Settings">⚙ &nbsp; Settings</button>
+  </nav>
+  <div class="sidebar-foot">Self-hosted by design<br>Private data. Your server.</div>
+</aside>
+<main class="main">
+  <header class="top">
+    <div><div class="eyebrow" id="eyebrow">SALES WORKSPACE / LEADS</div><h1 id="page-title">Lead overview</h1></div>
+    <div class="actions"><button class="btn" id="export-btn">↓ Export CSV</button><button class="btn primary" id="add-btn">＋ Add lead</button></div>
+  </header>
+  <section class="stats" aria-label="Lead summary">
+    <div class="stat"><div class="stat-label">Total leads</div><div class="stat-value" id="stat-total">—</div><div class="stat-note">In your workspace</div></div>
+    <div class="stat"><div class="stat-label">Qualified</div><div class="stat-value" id="stat-qualified">—</div><div class="stat-note">Ready for next steps</div></div>
+    <div class="stat"><div class="stat-label">Pipeline value</div><div class="stat-value" id="stat-value">—</div><div class="stat-note">Open opportunities</div></div>
+    <div class="stat"><div class="stat-label">Won deals</div><div class="stat-value" id="stat-won">—</div><div class="stat-note">Closed successfully</div></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><div class="panel-title" id="table-title">All leads</div><div class="panel-sub" id="table-sub">Track relationships and move opportunities forward.</div></div><div class="tools"><input class="search" id="search" type="search" placeholder="Search leads…" aria-label="Search leads"><select class="filter" id="stage-filter" aria-label="Filter by stage"><option value="">All stages</option><option>New</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Lead</th><th>Stage</th><th>Source</th><th>Value</th><th>Next action</th><th>Owner</th></tr></thead><tbody id="lead-rows"></tbody></table><div class="empty" id="empty" hidden>No leads match your search. Add a lead to get started.</div></div>
+    <div class="footer"><span id="row-count">0 leads</span><span>Changes saved in this browser</span></div>
+  </section>
+  <p class="notice">Starter preview: sample records are stored only in this browser using local storage. Do not use this prototype for real customer data until server-side authentication, persistence, and backups are implemented.</p>
+</main>
+</div>
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+<form class="modal" id="lead-form">
+  <h2 id="modal-title">Add a lead</h2><p>Capture the relationship and its next step.</p>
+  <div class="form-grid">
+    <div class="field"><label for="name">Full name *</label><input id="name" name="name" required maxlength="120" placeholder="Alex Morgan"></div>
+    <div class="field"><label for="company">Company</label><input id="company" name="company" maxlength="120" placeholder="Company name"></div>
+    <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" maxlength="254" placeholder="alex@example.com"></div>
+    <div class="field"><label for="stage">Stage</label><select id="stage" name="stage"><option>New</option><option>Qualified</option><option>Proposal</option><option>Negotiation</option><option>Won</option><option>Lost</option></select></div>
+    <div class="field"><label for="source">Source</label><select id="source" name="source"><option>Website</option><option>Referral</option><option>Outbound</option><option>Event</option><option>Other</option></select></div>
+    <div class="field"><label for="value">Potential value (€)</label><input id="value" name="value" type="number" min="0" step="0.01" placeholder="0"></div>
+    <div class="field full"><label for="next">Next action</label><input id="next" name="next" maxlength="180" placeholder="e.g. Send introduction on Friday"></div>
+    <div class="field full"><label for="owner">Owner</label><input id="owner" name="owner" maxlength="120" placeholder="Team member"></div>
+  </div>
+  <div class="modal-actions"><button type="button" class="btn" id="cancel-btn">Cancel</button><button class="btn primary" type="submit">Save lead</button></div>
+</form>
+</div>
+<script>
+const STORAGE_KEY='realdesk.leads.v1';
+const sampleLeads=[
+{id:1,name:'Maya Patel',company:'Northstar Studio',email:'maya@northstar.example',stage:'Qualified',source:'Referral',value:12500,next:'Schedule discovery call',owner:'Jamie Chen'},
+{id:2,name:'Luca Romano',company:'Forma Labs',email:'luca@forma.example',stage:'Proposal',source:'Website',value:8400,next:'Send revised proposal',owner:'Alex Rivera'},
+{id:3,name:'Sofia Andersson',company:'Greenline Co.',email:'sofia@greenline.example',stage:'New',source:'Outbound',value:5600,next:'Follow up by email',owner:'Jamie Chen'},
+{id:4,name:'Noah Williams',company:'Brightpath',email:'noah@brightpath.example',stage:'Negotiation',source:'Event',value:18900,next:'Review contract terms',owner:'Taylor Reed'},
+{id:5,name:'Ines Costa',company:'Coast & Co.',email:'ines@coast.example',stage:'Won',source:'Referral',value:7200,next:'Plan onboarding',owner:'Alex Rivera'}
+];
+let leads=loadLeads();let currentView='Leads';
+function loadLeads(){try{const saved=localStorage.getItem(STORAGE_KEY);return saved?JSON.parse(saved):sampleLeads.map(x=>({...x}));}catch{return sampleLeads.map(x=>({...x}));}}
+function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(leads));}catch{alert('Could not save in this browser. Check local storage settings.');}}
+function money(n){return new Intl.NumberFormat('en-IE',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(Number(n)||0)}
+function initials(name){return String(name||'?').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()}
+function safe(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function render(){const q=document.getElementById('search').value.trim().toLowerCase();const stage=document.getElementById('stage-filter').value;
+const filtered=leads.filter(l=>(!stage||l.stage===stage)&&(!q||[l.name,l.company,l.email,l.stage,l.source,l.owner,l.next].join(' ').toLowerCase().includes(q)));
+document.getElementById('stat-total').textContent=leads.length;
+document.getElementById('stat-qualified').textContent=leads.filter(l=>['Qualified','Proposal','Negotiation'].includes(l.stage)).length;
+document.getElementById('stat-value').textContent=money(leads.filter(l=>!['Won','Lost'].includes(l.stage)).reduce((a,l)=>a+(Number(l.value)||0),0));
+document.getElementById('stat-won').textContent=leads.filter(l=>l.stage==='Won').length;
+document.getElementById('lead-rows').innerHTML=filtered.map(l=>'<tr><td><div class="person"><div class="avatar">'+safe(initials(l.name))+'</div><div><div class="person-name">'+safe(l.name)+'</div><div class="company">'+safe(l.company||l.email||'No company added')+'</div></div></div></td><td><span class="pill '+safe(l.stage.toLowerCase())+'">'+safe(l.stage)+'</span></td><td class="source">'+safe(l.source||'—')+'</td><td>'+money(l.value)+'</td><td>'+safe(l.next||'—')+'</td><td>'+safe(l.owner||'Unassigned')+'</td></tr>').join('');
+document.getElementById('empty').hidden=filtered.length!==0;
+document.getElementById('row-count').textContent=filtered.length+' of '+leads.length+' lead'+(leads.length===1?'':'s');
+document.getElementById('table-title').textContent=currentView==='Leads'?'All leads':currentView;
+document.getElementById('table-sub').textContent=currentView==='Leads'?'Track relationships and move opportunities forward.':'This starter view currently uses the lead workspace data.';
+}
+function openModal(){document.getElementById('modal-backdrop').classList.add('open');document.getElementById('name').focus()}
+function closeModal(){document.getElementById('modal-backdrop').classList.remove('open');document.getElementById('lead-form').reset()}
+document.getElementById('add-btn').addEventListener('click',openModal);
+document.getElementById('cancel-btn').addEventListener('click',closeModal);
+document.getElementById('modal-backdrop').addEventListener('click',e=>{if(e.target.id==='modal-backdrop')closeModal()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+document.getElementById('lead-form').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.currentTarget);leads.unshift({id:Date.now(),name:String(f.get('name')).trim(),company:String(f.get('company')).trim(),email:String(f.get('email')).trim(),stage:String(f.get('stage')),source:String(f.get('source')),value:Math.max(0,Number(f.get('value'))||0),next:String(f.get('next')).trim(),owner:String(f.get('owner')).trim()});save();closeModal();render()});
+document.getElementById('search').addEventListener('input',render);
+document.getElementById('stage-filter').addEventListener('change',render);
+document.getElementById('export-btn').addEventListener('click',()=>{const cols=['name','company','email','stage','source','value','next','owner'];const csv=[cols.join(','),...leads.map(l=>cols.map(k=>'"'+String(l[k]??'').replace(/"/g,'""')+'"').join(','))].join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='realdesk-leads.csv';a.click();URL.revokeObjectURL(url)});
+document.querySelectorAll('.nav button[data-view]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');currentView=b.dataset.view;document.getElementById('page-title').textContent=currentView==='Leads'?'Lead overview':currentView;document.getElementById('eyebrow').textContent='SALES WORKSPACE / '+currentView.toUpperCase();render()}));
+render();
+</script>
+</body>
+</html>
