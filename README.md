@@ -1,6 +1,10 @@
-# RealDesk
+# LeadScout product family
 
-RealDesk is an open-source, self-hosted contact-center application inspired by modern agent workspaces. It is being developed as two distinct role-based workspaces backed by one API and database.
+**LeadScout is the parent platform**: the primary company workspace for AI-assisted lead research, provider API keys, saved prospect lists, and integrations. **RealDesk is its companion contact-center product** for campaigns, agents, internet calling, and call outcomes. The shared-platform architecture is documented in [docs/LEADSCOUT_ARCHITECTURE.md](docs/LEADSCOUT_ARCHITECTURE.md).
+
+## RealDesk
+
+RealDesk is the contact-center component of the planned LeadScout product family. The existing implementation is still the current app; the LeadScout parent workspace and shared sign-in are planned architecture and are not yet implemented. RealDesk currently has role-based admin/supervisor and agent workspaces backed by one API and database.
 
 ## Product workspaces
 
