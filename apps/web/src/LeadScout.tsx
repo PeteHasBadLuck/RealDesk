@@ -7,7 +7,7 @@ import "./leadscout.css";
 type Lead = { id:string; name:string; website?:string|null; description?:string|null; sourceUrl:string; createdAt:string };
 type Job = { id:string; prompt:string; status:string; resultCount:number; createdAt:string; _count?:{leads:number} };
 const api = async (path:string, token:string, init:RequestInit={}) => {
-  const response = await fetch(path,{...init,headers:{...(init.body?{"Content-Type":"application/json"}:{}),Authorization:"Bearer "+token,...(init.headers||{})}});
+  const response = await fetch(path,{...init,headers:{...(init.body?{"Content-Type":"application/json"}:{}),Authorization:"Bearer "+token,...(init.headers as Record<string,string>||{})}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok) throw new Error(data.error||"Request failed");
   return data;
