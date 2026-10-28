@@ -22,8 +22,8 @@ function LeadScout(){
  const [prompt,setPrompt]=useState("Find independent roofing companies in Texas with a public business website.");
  const [count,setCount]=useState(10); const [leads,setLeads]=useState<Lead[]>([]); const [jobs,setJobs]=useState<Job[]>([]);
  const [campaigns,setCampaigns]=useState<Campaign[]>([]); const [campaignId,setCampaignId]=useState("");
- const selectedAllReviewed=selectedIds.length>0&&selectedIds.every(id=>leads.find(l=>l.id===id)?.reviewed===true);
  const [selectedIds,setSelectedIds]=useState<string[]>([]); const [enrichingId,setEnrichingId]=useState("");
+ const selectedAllReviewed=selectedIds.length>0&&selectedIds.every(id=>leads.find(l=>l.id===id)?.reviewed===true);
  const [busy,setBusy]=useState(false); const [keyBusy,setKeyBusy]=useState(false); const [importBusy,setImportBusy]=useState(false); const [reviewBusy,setReviewBusy]=useState(false);
  const [notice,setNotice]=useState(""); const [error,setError]=useState("");
  const flash=(message:string)=>{setNotice(message);setError("");};
