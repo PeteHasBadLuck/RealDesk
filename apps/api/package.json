@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
     "db:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"
   },
