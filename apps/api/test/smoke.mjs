@@ -88,6 +88,8 @@ async function main() {
   });
   assert.equal(secondRegistration.data.user.role, "OWNER");
   assert.equal(secondRegistration.data.user.company.name, "Second Test Company");
+  const secondCompanyProviders = await call("/api/leadscout/providers", { token: secondRegistration.data.token });
+  assert.equal(secondCompanyProviders.data.providers.find(p => p.provider === "brave").configured, false, "provider keys must be isolated by company");
   await call("/api/auth/register-company", {
     method: "POST", expected: 409,
     body: { companyName: "Duplicate Email", name: "Duplicate Owner", email: "owner2@realdesk.test", password: "CI_Second_Company_Owner_Password_9284!" }
