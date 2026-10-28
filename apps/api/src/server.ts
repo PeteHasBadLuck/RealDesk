@@ -59,6 +59,15 @@ app.get("/api/auth/me", { preHandler: [app.authenticate] }, async req => {
   const user = await prisma.user.findFirstOrThrow({ where: { id: req.session.sub, companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, company: { select: { name: true } } } });
   return { user };
 });
+app.post("/api/auth/change-password", { preHandler: [app.authenticate] }, async (req, reply) => {
+  const p = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(14).max(200) }).safeParse(req.body);
+  if (!p.success) return reply.code(400).send({ error: "New password must be at least 14 characters." });
+  const user = await prisma.user.findFirst({ where: { id: req.session.sub, companyId: req.session.companyId, active: true } });
+  if (!user || !(await bcrypt.compare(p.data.currentPassword, user.passwordHash))) return reply.code(401).send({ error: "Current password is incorrect." });
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await bcrypt.hash(p.data.newPassword, 12) } });
+  await audit(req.session.companyId, req.session.sub, "auth.password_changed", "User", user.id);
+  return { ok: true };
+});
 
 app.get("/api/users", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, supervisorRoles)) return;
