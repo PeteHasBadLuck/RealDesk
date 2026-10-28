@@ -331,6 +331,7 @@ app.put("/api/voip/config", { preHandler: [app.authenticate] }, async (req, repl
   if (!requireRole(req, reply, adminRoles)) return;
   const p = z.object({ provider: z.string().min(1).max(80), sipDomain: z.string().min(1).max(255), sipUsername: z.string().min(1).max(255), sipPassword: z.string().min(1).max(500).optional(), outboundCallerId: z.string().max(50).optional(), websocketUrl: z.string().url().optional().or(z.literal("")), recordingEnabled: z.boolean().default(false), recordingNoticeText: z.string().max(1000).optional(), iceServersJson: z.string().max(4000).optional(), clearIceServers: z.boolean().optional() }).safeParse(req.body);
   if (!p.success) return reply.code(400).send({ error: "Invalid VoIP configuration" });
+  if (p.data.recordingEnabled && !p.data.recordingNoticeText?.trim()) return reply.code(400).send({ error: "Add the company-approved recording notice before enabling call recording." });
   if (!p.data.sipPassword && !await prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } })) return reply.code(400).send({ error: "SIP password is required for first setup" });
   const cryptoKey = process.env.VOIP_ENCRYPTION_KEY;
   if (p.data.sipPassword && (!cryptoKey || cryptoKey.length < 32)) return reply.code(503).send({ error: "Server administrator must configure VOIP_ENCRYPTION_KEY (32+ characters) before storing credentials" });
