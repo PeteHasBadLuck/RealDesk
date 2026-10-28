@@ -8,7 +8,7 @@ RealDesk is designed to run on a company-controlled server. A browser-only GitHu
 - A domain name and HTTPS reverse proxy for public use
 - A SIP/WebRTC provider or PBX configured for secure WebSocket signaling and WebRTC media
 - Persistent, backed-up PostgreSQL volume
-- Encrypted object storage for call recordings before recording is enabled in production
+- Persistent encrypted recording storage (the Compose setup creates a dedicated volume; the hosted blueprint mounts a persistent disk)
 
 ## Start the stack
 
@@ -43,7 +43,7 @@ The current container runs Prisma schema synchronization at startup for this ear
 
 The repository includes a React web application, Fastify API, PostgreSQL data model, login and roles, contact CRUD/CSV import, campaigns, call records and dispositions, encrypted-at-rest VoIP credentials, and admin screens.
 
-Real SIP registration/call control and production call-audio capture are not yet complete. The browser microphone permission and local test recording are not a real phone-call recording. The recording API intentionally refuses uploads until an encrypted object-storage adapter is implemented. Do not treat the softphone as production-ready.
+Outbound SIP-over-WebSocket/WebRTC calling and consent-gated mixed audio capture are wired into the agent UI, but the integration must be validated against your specific PBX/provider. Inbound-call handling, retention/deletion automation, provider-specific edge cases and a production security review remain incomplete. Recording files are AES-256-GCM encrypted on persistent storage and playback is role-checked; verify that both call participants are captured before relying on recordings.
 ## Deploy online without using your laptop as a server
 
 The repository includes `render.yaml` for a hosted deployment. On a device with a browser:
