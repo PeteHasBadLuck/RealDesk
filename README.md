@@ -1,35 +1,63 @@
 # RealDesk
 
-Open-source, self-hostable contact-center software inspired by modern agent workspaces.
+RealDesk is an open-source, self-hosted contact-center application inspired by modern agent workspaces. It is being developed as two distinct role-based workspaces backed by one API and database.
 
-## Current prototype
+## Product workspaces
 
-The browser prototype focuses on the contact-center agent workflow:
+### Admin / supervisor
+- Company user accounts and roles
+- Campaign creation and contact-list management
+- VoIP configuration form with encrypted-at-rest credentials
+- Call history, dispositions, reporting and audit events
+- Recording access UI (requires production storage adapter)
 
-- Campaign contact queue with search and status filters
-- Agent availability state
-- Selected-contact details and recent interaction history
-- Simulated softphone controls
-- Call outcome logging, notes, and contact editing
-- Browser-local sample data and responsive layout
-- GitHub Pages workflow for a browser-only demo
+### Call agent
+- Sign-in and role-based workspace
+- Contact search, add/edit, CSV import and export
+- Microphone permission request
+- Call record creation and mandatory ending-reason workflow
+- Callback, interest, no-answer, wrong-number, sale and do-not-call dispositions
+- Agent-scoped call history
 
-## Try it in a browser
+## Stack
 
-The static prototype can be published with GitHub Pages. No local installation is needed to view it. See [deployment instructions](docs/DEPLOYMENT.md).
+- Web: React, TypeScript, Vite, Nginx
+- API: Fastify, TypeScript, JWT authentication, Zod validation
+- Data: PostgreSQL + Prisma
+- Deployment: Docker Compose; Render blueprint included as an online hosting option
 
-## Important limitations
+## Run on a server
 
-This is an early UI prototype, not a production telephony system. The call controls are simulations and do not place calls. Records are stored in the current browser only and do not sync between users or devices. There is no server-side authentication, database, SIP/WebRTC integration, call recording, predictive dialer, or omnichannel routing yet. Do not use it for real customer data.
+See [self-hosting deployment instructions](docs/DEPLOYMENT.md). You do not need to install development tools on your personal laptop if you deploy the repository to a supported cloud host.
 
-## Planned architecture
+## Current implementation status
 
-- Frontend: TypeScript-based agent desktop
-- Backend: authenticated API and PostgreSQL
-- Telephony: pluggable SIP/WebRTC provider integration
-- Deployment: Docker Compose, reverse proxy, and documented backups
-- Security: roles, audit trail, consent and do-not-call controls
+This is an early working foundation, not a production-ready contact center yet.
+
+Implemented in the repository:
+- Separate admin/supervisor and agent navigation
+- Password login and role checks
+- Company-scoped contacts, contact CRUD and CSV import/export
+- Campaign creation
+- Call records and required call disposition endpoint
+- VoIP settings form and encrypted-at-rest credential storage
+- Audit log and call summary endpoints
+- Docker-based frontend/API/PostgreSQL deployment definitions
+
+Not yet production-complete:
+- SIP/WebRTC signaling and actual inbound/outbound calling
+- Real call-media capture/recording pipeline
+- Encrypted object storage, retention and playback authorization
+- Password reset, MFA, session revocation and comprehensive tests
+- Production migration/backup/restore process
+- Telephony-provider-specific adapter and end-to-end validation
+
+The current browser microphone check is not the same as connecting a phone call. The browser's local microphone audio is not a complete recording of both sides of a real call. Recording endpoints intentionally remain disabled until secure object storage is implemented. Do not enter real customer data or expose this version publicly until the outstanding security and telephony work is complete.
+
+## Security
+
+Read [Security and recording checklist](docs/SECURITY.md). Call recording laws and consent requirements depend on jurisdiction and participants. Recording should only be enabled after the company has established lawful notice/consent, retention, access control, and deletion processes.
 
 ## License
 
-AGPL-3.0-or-later. See [LICENSE](LICENSE).
+AGPL-3.0-or-later; see [LICENSE](LICENSE).
