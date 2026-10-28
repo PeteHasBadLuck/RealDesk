@@ -195,7 +195,7 @@ app.get("/api/voip/client-config", { preHandler: [app.authenticate] }, async (re
     decipher.setAuthTag(Buffer.from(tagText, "base64"));
     const password = Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
     await audit(req.session.companyId, req.session.sub, "voip.client_config_accessed", "VoipConfig", config.id);
-    return { uri: `sip:${config.sipUsername}@${config.sipDomain}`, websocketUrl: config.websocketUrl, username: config.sipUsername, password, displayName: (await prisma.user.findUnique({ where: { id: req.session.sub } }))?.name || "RealDesk agent", recordingEnabled: config.recordingEnabled };
+    return { uri: `sip:${config.sipUsername}@${config.sipDomain}`, websocketUrl: config.websocketUrl, username: config.sipUsername, password, displayName: (await prisma.user.findUnique({ where: { id: req.session.sub } }))?.name || "RealDesk agent", recordingEnabled: config.recordingEnabled, recordingNoticeText: config.recordingNoticeText };
   } catch {
     return reply.code(503).send({ error: "VoIP credentials could not be decrypted; check the server encryption key" });
   }
