@@ -1,7 +1,53 @@
 services:
-  realdesk:
-    build: .
-    container_name: realdesk
-    ports:
-      - "8080:80"
+  db:
+    image: postgres:16-alpine
+    container_name: realdesk-db
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-realdesk}
+      POSTGRES_USER: ${POSTGRES_USER:-realdesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - realdesk-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-realdesk} -d ${POSTGRES_DB:-realdesk}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [private]
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: realdesk-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-realdesk}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-realdesk}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      VOIP_ENCRYPTION_KEY: ${VOIP_ENCRYPTION_KEY:?Set VOIP_ENCRYPTION_KEY in .env}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_COMPANY_NAME: ${SEED_COMPANY_NAME:-Your Company}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose: ["3001"]
+    networks: [private]
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: realdesk-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on: [api]
+    networks: [private]
+volumes:
+  realdesk-postgres:
+networks:
+  private:
+    driver: bridge
