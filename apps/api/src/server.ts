@@ -119,6 +119,7 @@ app.get("/api/contacts", { preHandler: [app.authenticate] }, async req => {
   const q = (req.query as any)?.q?.toString().slice(0, 100);
   const status = (req.query as any)?.status?.toString();
   const where: any = { companyId: req.session.companyId };
+  if (req.session.role === "AGENT") where.OR = [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }];
   if (status && ["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","DO_NOT_CALL","CONVERTED"].includes(status)) where.status = status;
   if (q) where.OR = [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { email: { contains: q, mode: "insensitive" } }, { companyName: { contains: q, mode: "insensitive" } }];
   return prisma.contact.findMany({ where, orderBy: { updatedAt: "desc" }, take: 500 });
@@ -200,16 +201,41 @@ app.post("/api/campaigns", { preHandler: [app.authenticate] }, async (req, reply
   await audit(req.session.companyId, req.session.sub, "campaign.created", "Campaign", c.id);
   return reply.code(201).send(c);
 });
-app.post("/api/campaigns/:id/contacts", { preHandler: [app.authenticate] }, async (req, reply) => {
+app.get("/api/campaigns/:id/contacts", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, supervisorRoles)) return;
-  const p = z.object({ contactIds: z.array(z.string()).min(1).max(500) }).safeParse(req.body);
-  if (!p.success) return reply.code(400).send({ error: "Provide contact IDs" });
   const campaignId = (req.params as any).id;
   const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, companyId: req.session.companyId } });
   if (!campaign) return reply.code(404).send({ error: "Campaign not found" });
+  const links = await prisma.campaignContact.findMany({ where: { campaignId }, include: { contact: true }, orderBy: { createdAt: "desc" } });
+  const userIds = [...new Set(links.map(link => link.assignedTo).filter((id): id is string => Boolean(id)))];
+  const agents = await prisma.user.findMany({ where: { id: { in: userIds }, companyId: req.session.companyId }, select: { id: true, name: true, email: true } });
+  const agentMap = new Map(agents.map(agent => [agent.id, agent]));
+  return links.map(link => ({ contact: link.contact, assignedTo: link.assignedTo, assignee: link.assignedTo ? agentMap.get(link.assignedTo) || null : null, addedAt: link.createdAt }));
+});
+app.post("/api/campaigns/:id/contacts", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const p = z.object({ contactIds: z.array(z.string()).min(1).max(500), assignedTo: z.string().nullable().optional() }).safeParse(req.body);
+  if (!p.success) return reply.code(400).send({ error: "Provide contact IDs and an optional agent assignment" });
+  const campaignId = (req.params as any).id;
+  const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, companyId: req.session.companyId } });
+  if (!campaign) return reply.code(404).send({ error: "Campaign not found" });
+  if (p.data.assignedTo) {
+    const assignee = await prisma.user.findFirst({ where: { id: p.data.assignedTo, companyId: req.session.companyId, active: true } });
+    if (!assignee || assignee.role !== "AGENT") return reply.code(400).send({ error: "Choose an active call agent from this company" });
+  }
   const contacts = await prisma.contact.findMany({ where: { id: { in: p.data.contactIds }, companyId: req.session.companyId }, select: { id: true } });
-  await prisma.campaignContact.createMany({ data: contacts.map(c => ({ campaignId, contactId: c.id })), skipDuplicates: true });
-  return { added: contacts.length };
+  if (!contacts.length) return reply.code(400).send({ error: "No valid contacts belong to this company" });
+  if (p.data.assignedTo !== undefined) {
+    await prisma.$transaction(contacts.map(contact => prisma.campaignContact.upsert({
+      where: { campaignId_contactId: { campaignId, contactId: contact.id } },
+      create: { campaignId, contactId: contact.id, assignedTo: p.data.assignedTo },
+      update: { assignedTo: p.data.assignedTo }
+    })));
+  } else {
+    await prisma.campaignContact.createMany({ data: contacts.map(contact => ({ campaignId, contactId: contact.id })), skipDuplicates: true });
+  }
+  await audit(req.session.companyId, req.session.sub, "campaign.contacts_assigned", "Campaign", campaignId, { count: contacts.length, assignedTo: p.data.assignedTo || null });
+  return { accepted: contacts.length, assignedTo: p.data.assignedTo ?? null };
 });
 
 const dispositions = ["INTERESTED","CALLBACK_REQUESTED","NO_ANSWER","BUSY","VOICEMAIL","NOT_INTERESTED","MEETING_BOOKED","SALE_COMPLETED","WRONG_NUMBER","DO_NOT_CALL","OTHER"] as const;
