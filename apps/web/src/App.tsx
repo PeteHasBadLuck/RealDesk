@@ -19,8 +19,8 @@ const navAgent=[["Agent desktop",Headphones],["Contacts",ContactRound],["Callbac
 export default function App(){
  const [user,setUser]=useState<User|null>(null),[email,setEmail]=useState(""),[password,setPassword]=useState(""),[loginError,setLoginError]=useState(""),[loading,setLoading]=useState(false);
  const [section,setSection]=useState("Agent desktop"),[contacts,setContacts]=useState<Contact[]>([]),[calls,setCalls]=useState<Call[]>([]),[users,setUsers]=useState<User[]>([]),[campaigns,setCampaigns]=useState<any[]>([]),[recordings,setRecordings]=useState<any[]>([]),[audit,setAudit]=useState<any[]>([]),[summary,setSummary]=useState<any>({});
- const [query,setQuery]=useState(""),[selected,setSelected]=useState<Contact|null>(null),[notice,setNotice]=useState(""),[showContact,setShowContact]=useState(false),[showUser,setShowUser]=useState(false),[showCampaign,setShowCampaign]=useState(false),[showAssignContacts,setShowAssignContacts]=useState(false),[assignCampaign,setAssignCampaign]=useState<any>(null),[assignContactIds,setAssignContactIds]=useState<string[]>([]),[assignAgentId,setAssignAgentId]=useState(""),[showFinish,setShowFinish]=useState(false),[activeCall,setActiveCall]=useState<Call|null>(null),[callStarted,setCallStarted]=useState<number|null>(null),[micAllowed,setMicAllowed]=useState(false),[muted,setMuted]=useState(false),[recording,setRecording]=useState(false),[recordedBlob,setRecordedBlob]=useState<Blob|null>(null),[recordConsent,setRecordConsent]=useState(false),[recordingEnabled,setRecordingEnabled]=useState(false),[disposition,setDisposition]=useState("NO_ANSWER"),[callNotes,setCallNotes]=useState(""),[form,setForm]=useState<any>({firstName:"",lastName:"",phone:"",email:"",companyName:"",status:"NEW",notes:""}),[userForm,setUserForm]=useState<any>({name:"",email:"",password:"",role:"AGENT",sipUsername:"",sipDomain:"",sipPassword:""}),[campaignName,setCampaignName]=useState(""),[voip,setVoip]=useState<any>({provider:"",sipDomain:"",sipUsername:"",sipPassword:"",outboundCallerId:"",websocketUrl:"",recordingEnabled:false,recordingNoticeText:""}),[voipConfigured,setVoipConfigured]=useState(false),[mobileNav,setMobileNav]=useState(false);
- const mediaRef=useRef<MediaStream|null>(null),recorderRef=useRef<MediaRecorder|null>(null),chunksRef=useRef<Blob[]>([]),audioRef=useRef<HTMLAudioElement|null>(null),uaRef=useRef<any>(null),sessionRef=useRef<any>(null),audioContextRef=useRef<AudioContext|null>(null),finishOpenRef=useRef(false);
+ const [query,setQuery]=useState(""),[selected,setSelected]=useState<Contact|null>(null),[notice,setNotice]=useState(""),[showContact,setShowContact]=useState(false),[showUser,setShowUser]=useState(false),[showCampaign,setShowCampaign]=useState(false),[showAssignContacts,setShowAssignContacts]=useState(false),[assignCampaign,setAssignCampaign]=useState<any>(null),[assignContactIds,setAssignContactIds]=useState<string[]>([]),[assignAgentId,setAssignAgentId]=useState(""),[showFinish,setShowFinish]=useState(false),[activeCall,setActiveCall]=useState<Call|null>(null),[callStarted,setCallStarted]=useState<number|null>(null),[micAllowed,setMicAllowed]=useState(false),[muted,setMuted]=useState(false),[phoneStatus,setPhoneStatus]=useState("Disconnected"),[incomingInvite,setIncomingInvite]=useState<any>(null),[recording,setRecording]=useState(false),[recordedBlob,setRecordedBlob]=useState<Blob|null>(null),[recordConsent,setRecordConsent]=useState(false),[recordingEnabled,setRecordingEnabled]=useState(false),[disposition,setDisposition]=useState("NO_ANSWER"),[callNotes,setCallNotes]=useState(""),[form,setForm]=useState<any>({firstName:"",lastName:"",phone:"",email:"",companyName:"",status:"NEW",notes:""}),[userForm,setUserForm]=useState<any>({name:"",email:"",password:"",role:"AGENT",sipUsername:"",sipDomain:"",sipPassword:""}),[campaignName,setCampaignName]=useState(""),[voip,setVoip]=useState<any>({provider:"",sipDomain:"",sipUsername:"",sipPassword:"",outboundCallerId:"",websocketUrl:"",recordingEnabled:false,recordingNoticeText:""}),[voipConfigured,setVoipConfigured]=useState(false),[mobileNav,setMobileNav]=useState(false);
+ const mediaRef=useRef<MediaStream|null>(null),recorderRef=useRef<MediaRecorder|null>(null),chunksRef=useRef<Blob[]>([]),audioRef=useRef<HTMLAudioElement|null>(null),uaRef=useRef<any>(null),sessionRef=useRef<any>(null),audioContextRef=useRef<AudioContext|null>(null),finishOpenRef=useRef(false),incomingInviteRef=useRef<any>(null),phoneConfigRef=useRef<any>(null);
  const isAdmin=!!user&&["OWNER","ADMIN","SUPERVISOR"].includes(user.role),canAdmin=!!user&&["OWNER","ADMIN"].includes(user.role);
  const flash=(s:string)=>{setNotice(s);window.setTimeout(()=>setNotice(""),4000)};
  async function refresh(){
@@ -48,50 +48,110 @@ export default function App(){
  async function saveCampaign(e:React.FormEvent){e.preventDefault();try{await request("/api/campaigns",{method:"POST",body:JSON.stringify({name:campaignName})});setCampaignName("");setShowCampaign(false);await refresh();flash("Campaign created")}catch(err:any){flash(err.message)}}
  async function saveCampaignContacts(e:React.FormEvent){e.preventDefault();if(!assignCampaign||!assignContactIds.length){flash("Select at least one contact.");return}try{const result=await request<any>("/api/campaigns/"+assignCampaign.id+"/contacts",{method:"POST",body:JSON.stringify({contactIds:assignContactIds,...(assignAgentId?{assignedTo:assignAgentId==="__unassigned"?null:assignAgentId}:{})})});setShowAssignContacts(false);setAssignCampaign(null);setAssignContactIds([]);setAssignAgentId("");await refresh();flash("Processed "+result.accepted+" contacts for campaign")}catch(err:any){flash(err.message)}}
  async function saveVoip(e:React.FormEvent){e.preventDefault();try{await request("/api/voip/config",{method:"PUT",body:JSON.stringify(voip)});setVoipConfigured(true);setVoip((x:any)=>({...x,sipPassword:""}));flash("VoIP settings saved securely")}catch(err:any){flash(err.message)}}
+ async function getPhoneConfig(){
+  const config=await request<any>("/api/voip/client-config");
+  if(!config.websocketUrl?.startsWith("wss://"))throw new Error("VoIP must use a secure WSS WebSocket URL");
+  phoneConfigRef.current=config;setRecordingEnabled(!!config.recordingEnabled);
+  setVoip((old:any)=>({...old,recordingEnabled:!!config.recordingEnabled,recordingNoticeText:config.recordingNoticeText||old.recordingNoticeText}));
+  return config;
+ }
+ async function recordMissedIncoming(invite:any){
+  if(!invite||incomingInviteRef.current?.session!==invite.session)return;
+  incomingInviteRef.current=null;setIncomingInvite(null);
+  try{
+   const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:false})});
+   const done=await request<Call>("/api/calls/"+call.id+"/finish",{method:"PATCH",body:JSON.stringify({disposition:"NO_ANSWER",notes:"Incoming call ended before it was answered.",durationSec:0,status:"MISSED"})});
+   setCalls(old=>[done,...old.filter(c=>c.id!==done.id)]);await refresh();
+  }catch(err:any){flash("Could not log missed incoming call: "+err.message)}
+ }
+ function wireSession(session:any,call:Call,contact:Contact|null,config:any,consent:boolean){
+  sessionRef.current=session;finishOpenRef.current=false;setSelected(contact);setActiveCall(call);setCallStarted(Date.now());setSection("Agent desktop");setMuted(false);setRecordedBlob(null);setRecording(false);setRecordingEnabled(!!config.recordingEnabled);
+  session.on("accepted",()=>{setMicAllowed(true);flash("Call connected.")});
+  session.on("confirmed",()=>setMicAllowed(true));
+  session.on("peerconnection",(event:any)=>{
+   const pc=event.peerconnection;
+   pc.addEventListener("track",(trackEvent:any)=>{
+    const stream=trackEvent.streams?.[0]||new MediaStream([trackEvent.track]);
+    const remote=new Audio();remote.autoplay=true;remote.srcObject=stream;audioRef.current=remote;remote.play().catch(()=>flash("Click the page once to allow call audio playback."));
+    if(config.recordingEnabled&&consent&&typeof MediaRecorder!=="undefined"&&!recorderRef.current){
+     try{
+      const context=new AudioContext();audioContextRef.current=context;const destination=context.createMediaStreamDestination();
+      const tracks=[...pc.getSenders().map((sender:any)=>sender.track),...pc.getReceivers().map((receiver:any)=>receiver.track)].filter((track:any)=>track&&track.kind==="audio"&&track.readyState!=="ended");
+      for(const track of tracks){try{context.createMediaStreamSource(new MediaStream([track])).connect(destination)}catch{}}
+      if(destination.stream.getAudioTracks().length){
+       const recorder=new MediaRecorder(destination.stream);chunksRef.current=[];
+       recorder.ondataavailable=(dataEvent:BlobEvent)=>{if(dataEvent.data.size)chunksRef.current.push(dataEvent.data)};
+       recorder.onstop=()=>setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));
+       recorder.start(1000);recorderRef.current=recorder;setRecording(true);
+      }
+     }catch{flash("Recording could not start; verify browser support and consent settings.")}
+    }
+   });
+  });
+  session.on("ended",()=>{if(!finishOpenRef.current){void stopCall();flash("Call ended. Select the call outcome.")}});
+  session.on("failed",()=>{if(!finishOpenRef.current){void stopCall();flash("Call failed or was rejected. Select an outcome to save the attempt.")}});
+ }
+ async function ensurePhone(config:any){
+  if(uaRef.current)return uaRef.current;
+  const JsSIP=(await import("jssip")).default;
+  const socket=new JsSIP.WebSocketInterface(config.websocketUrl);
+  const ua=new JsSIP.UA({sockets:[socket],uri:config.uri,password:config.password,display_name:config.displayName||user?.name,register:true,session_timers:false});
+  uaRef.current=ua;setPhoneStatus("Connecting");
+  ua.on("registered",()=>{setPhoneStatus("Connected");flash("Phone registered and ready for calls.")});
+  ua.on("registrationFailed",()=>{setPhoneStatus("Failed");flash("SIP registration failed. Check the PBX credentials, WSS URL, and WebRTC configuration.")});
+  ua.on("disconnected",()=>setPhoneStatus("Disconnected"));
+  ua.on("newRTCSession",async (event:any)=>{
+   if(event.originator!=="remote")return;
+   const session=event.session;
+   if(sessionRef.current||incomingInviteRef.current){try{session.terminate()}catch{}return}
+   const number=String(session.remote_identity?.uri?.user||"Unknown caller");
+   const digits=number.replace(/[^\\d]/g,"");
+   const contact=contacts.find(item=>{const p=item.phone.replace(/[^\\d]/g,"");return p===digits||(p.length>=7&&digits.length>=7&&(p.endsWith(digits)||digits.endsWith(p)))})||null;
+   const invite={session,number,contact,config};
+   incomingInviteRef.current=invite;setIncomingInvite(invite);setSelected(contact);setSection("Agent desktop");
+   session.on("ended",()=>{if(incomingInviteRef.current?.session===session)void recordMissedIncoming(invite)});
+   session.on("failed",()=>{if(incomingInviteRef.current?.session===session)void recordMissedIncoming(invite)});
+  });
+  ua.start();
+  return ua;
+ }
+ async function connectPhone(){
+  try{if(!window.isSecureContext)throw new Error("Phone registration requires HTTPS (or localhost).");const config=await getPhoneConfig();await ensurePhone(config);flash("Connecting to your phone system…")}
+  catch(err:any){setPhoneStatus("Failed");flash(err.message||"Could not connect to phone system")}
+ }
+ function disconnectPhone(){
+  if(activeCall||incomingInvite){flash("Finish or reject the current call before disconnecting.");return}
+  try{uaRef.current?.stop()}catch{}uaRef.current=null;phoneConfigRef.current=null;setPhoneStatus("Disconnected");flash("Phone disconnected");
+ }
+ async function answerIncoming(){
+  const invite=incomingInviteRef.current;if(!invite)return;
+  try{
+   const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:recordConsent})});
+   incomingInviteRef.current=null;setIncomingInvite(null);wireSession(invite.session,call,invite.contact,invite.config,recordConsent);
+   invite.session.answer({mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:[{urls:"stun:stun.l.google.com:19302"}]}});
+   flash("Answering incoming call…");
+  }catch(err:any){flash(err.message||"Could not answer call");try{invite.session.terminate()}catch{}incomingInviteRef.current=null;setIncomingInvite(null)}
+ }
+ async function rejectIncoming(){
+  const invite=incomingInviteRef.current;if(!invite)return;
+  incomingInviteRef.current=null;setIncomingInvite(null);try{invite.session.terminate()}catch{}
+  try{
+   const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:invite.contact?.id,direction:"INBOUND",recordingConsent:false})});
+   const done=await request<Call>("/api/calls/"+call.id+"/finish",{method:"PATCH",body:JSON.stringify({disposition:"NO_ANSWER",notes:"Incoming call rejected by agent.",durationSec:0,status:"MISSED"})});
+   setCalls(old=>[done,...old.filter(c=>c.id!==done.id)]);await refresh();
+  }catch(err:any){flash(err.message)}
+ }
  async function startCall(contact:Contact,direction:"OUTBOUND"|"INBOUND"="OUTBOUND"){
   if(contact.doNotCall||contact.status==="DO_NOT_CALL"){flash("This contact is on the do-not-call list.");return}
   if(!window.isSecureContext){flash("Calling requires HTTPS (or localhost) so the browser can access the microphone.");return}
   try{
-   const config=await request<any>("/api/voip/client-config");
-   if(!config.websocketUrl?.startsWith("wss://"))throw new Error("VoIP must use a secure WSS WebSocket URL");
+   const config=await getPhoneConfig();
+   const ua=await ensurePhone(config);
    const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:contact.id,direction,recordingConsent:recordConsent})});
-   const JsSIP=(await import("jssip")).default;
-   const socket=new JsSIP.WebSocketInterface(config.websocketUrl);
-   const ua=new JsSIP.UA({sockets:[socket],uri:config.uri,password:config.password,display_name:config.displayName||user?.name,register:true,session_timers:false});
-   uaRef.current=ua;
-   ua.on("registrationFailed",()=>flash("SIP registration failed. Check the PBX credentials, WSS URL, and WebRTC configuration."));
-   ua.on("disconnected",()=>flash("SIP connection disconnected."));
-   ua.start();
-   const target="sip:"+contact.phone.replace(/[^\d+*#]/g,"")+"@"+config.sipDomain;
+   const target="sip:"+contact.phone.replace(/[^\\d+*#]/g,"")+"@"+config.sipDomain;
    const session=ua.call(target,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
-   sessionRef.current=session;
-   finishOpenRef.current=false;
-   setSelected(contact);setActiveCall(call);setCallStarted(Date.now());setSection("Agent desktop");setMuted(false);setRecordedBlob(null);setRecording(false);setRecordingEnabled(!!config.recordingEnabled);setVoip((old:any)=>({...old,recordingEnabled:!!config.recordingEnabled,recordingNoticeText:config.recordingNoticeText||old.recordingNoticeText}));
-   session.on("accepted",()=>{setMicAllowed(true);flash("Call connected.");});
-   session.on("confirmed",()=>setMicAllowed(true));
-   session.on("peerconnection",(event:any)=>{
-    const pc=event.peerconnection;
-    pc.addEventListener("track",(trackEvent:any)=>{
-      const stream=trackEvent.streams?.[0]||new MediaStream([trackEvent.track]);
-      const remote=new Audio();remote.autoplay=true;remote.srcObject=stream;audioRef.current=remote;remote.play().catch(()=>flash("Click the page once to allow call audio playback."));
-      if(config.recordingEnabled&&recordConsent&&typeof MediaRecorder!=="undefined"&&!recorderRef.current){
-       try{
-        const context=new AudioContext();audioContextRef.current=context;const destination=context.createMediaStreamDestination();
-        const mixTracks=[...pc.getSenders().map((sender:any)=>sender.track),...pc.getReceivers().map((receiver:any)=>receiver.track)].filter((track:any)=>track&&track.kind==="audio"&&track.readyState!=="ended");
-        for(const track of mixTracks){try{context.createMediaStreamSource(new MediaStream([track])).connect(destination)}catch{}}
-        if(destination.stream.getAudioTracks().length){
-         const recorder=new MediaRecorder(destination.stream);chunksRef.current=[];
-         recorder.ondataavailable=(dataEvent:BlobEvent)=>{if(dataEvent.data.size)chunksRef.current.push(dataEvent.data)};
-         recorder.onstop=()=>setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));
-         recorder.start(1000);recorderRef.current=recorder;setRecording(true);
-        }
-       }catch{flash("Recording could not start; verify browser support and consent settings.")}
-      }
-    });
-   });
-   session.on("ended",()=>{if(!finishOpenRef.current)stopCall();flash("Call ended. Select the call outcome.");});
-   session.on("failed",()=>{if(!finishOpenRef.current)stopCall();flash("Call failed or was rejected. Select an outcome to save the attempt.");});
-   flash("Connecting to the configured VoIP provider…");
+   wireSession(session,call,contact,config,recordConsent);
+   flash("Calling "+contact.firstName+"…");
   }catch(err:any){flash(err.name==="NotAllowedError"?"Microphone permission was denied. Allow microphone access in your browser.":err.message||"Could not start call")}
  }
  async function stopCall(){
