@@ -96,7 +96,7 @@ export default function App(){
   finishOpenRef.current=true;
   try{sessionRef.current?.terminate()}catch{}
   if(recorderRef.current?.state==="recording"){
-   await new Promise<void>(resolve=>{const recorder=recorderRef.current!;recorder.onstop=()=>{setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));resolve()};recorder.stop()});
+   await new Promise<void>(resolve=>{const recorder=recorderRef.current!;recorder.onstop=()=>{setRecordedBlob(new Blob(chunksRef.current,{type:recorder.mimeType||"audio/webm"}));resolve()};recorder.stop()});recorderRef.current=null;
   }
   setRecording(false);mediaRef.current?.getTracks().forEach(t=>t.stop());mediaRef.current=null;setMicAllowed(false);
   if(audioContextRef.current){await audioContextRef.current.close().catch(()=>{});audioContextRef.current=null}
