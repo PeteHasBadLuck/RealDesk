@@ -105,8 +105,8 @@ export default function App(){
    const session=event.session;
    if(sessionRef.current||incomingInviteRef.current){try{session.terminate()}catch{}return}
    const number=String(session.remote_identity?.uri?.user||"Unknown caller");
-   const digits=number.replace(/[^\\d]/g,"");
-   const contact=contacts.find(item=>{const p=item.phone.replace(/[^\\d]/g,"");return p===digits||(p.length>=7&&digits.length>=7&&(p.endsWith(digits)||digits.endsWith(p)))})||null;
+   const digits=number.replace(/[^\d]/g,"");
+   const contact=contacts.find(item=>{const p=item.phone.replace(/[^\d]/g,"");return p===digits||(p.length>=7&&digits.length>=7&&(p.endsWith(digits)||digits.endsWith(p)))})||null;
    const invite={session,number,contact,config};
    incomingInviteRef.current=invite;setIncomingInvite(invite);setRecordConsent(false);setSelected(contact);setSection("Agent desktop");
    session.on("ended",()=>{if(incomingInviteRef.current?.session===session)void recordMissedIncoming(invite)});
@@ -148,7 +148,7 @@ export default function App(){
    const config=await getPhoneConfig();
    const ua=await ensurePhone(config);
    const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:contact.id,direction,recordingConsent:recordConsent})});
-   const target="sip:"+contact.phone.replace(/[^\\d+*#]/g,"")+"@"+config.sipDomain;
+   const target="sip:"+contact.phone.replace(/[^\d+*#]/g,"")+"@"+config.sipDomain;
    const session=ua.call(target,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
    wireSession(session,call,contact,config,recordConsent);
    flash("Calling "+contact.firstName+"…");
@@ -169,11 +169,12 @@ export default function App(){
  async function finishCall(e:React.FormEvent){e.preventDefault();if(!activeCall)return;try{
   const durationSec=callStarted?Math.round((Date.now()-callStarted)/1000):0;
   const done=await request<Call>("/api/calls/"+activeCall.id+"/finish",{method:"PATCH",body:JSON.stringify({disposition,notes:callNotes,durationSec,status:disposition==="NO_ANSWER"?"MISSED":"COMPLETED"})});
+  let recordingError="";
   if(recordedBlob&&recordConsent&&recordingEnabled){
    const fd=new FormData();fd.append("file",recordedBlob,"call-"+activeCall.id+".webm");
-   try{await request("/api/calls/"+activeCall.id+"/recording",{method:"POST",body:fd})}catch(err:any){flash("Call saved, but recording upload is unavailable: "+err.message)}
+   try{await request("/api/calls/"+activeCall.id+"/recording",{method:"POST",body:fd})}catch(err:any){recordingError="Call outcome saved, but recording upload failed: "+err.message}
   }
-  setCalls(old=>[done,...old.filter(c=>c.id!==done.id)]);setActiveCall(null);setCallStarted(null);setRecordedBlob(null);setRecordConsent(false);setCallNotes("");setShowFinish(false);finishOpenRef.current=false;sessionRef.current=null;await refresh();flash("Call saved: "+dispositions.find(d=>d[0]===disposition)?.[1]);
+  setCalls(old=>[done,...old.filter(c=>c.id!==done.id)]);setActiveCall(null);setCallStarted(null);setRecordedBlob(null);setRecordConsent(false);setCallNotes("");setShowFinish(false);finishOpenRef.current=false;sessionRef.current=null;await refresh();flash(recordingError||("Call saved: "+dispositions.find(d=>d[0]===disposition)?.[1]));
  }catch(err:any){flash(err.message)}}
  const fmtDate=(s?:string)=>s?new Date(s).toLocaleString():"—",fmtDuration=(s?:number)=>s==null?"—":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s";
  async function playRecording(call:any){
