@@ -69,6 +69,15 @@ async function main() {
   const owner = await login(ownerEmail, ownerPassword);
   assert.equal(owner.user.role, "OWNER");
 
+  // LeadScout provider keys are encrypted, masked, and scoped to one company.
+  await call("/api/leadscout/providers/brave", {
+    method: "PUT", token: owner.token, method: "PUT", expected: 200,
+    body: { apiKey: "ci-brave-search-api-key-not-real" }
+  });
+  const leadProviders = await call("/api/leadscout/providers", { token: owner.token });
+  assert.equal(leadProviders.data.providers.find(p => p.provider === "brave").configured, true);
+  assert.ok(!JSON.stringify(leadProviders.data).includes("ci-brave-search-api-key-not-real"), "provider key must never be returned");
+
   await call("/api/auth/register-company", {
     method: "POST", expected: 400,
     body: { companyName: "Tiny", name: "New Owner", email: "weakpass@realdesk.test", password: "short" }
