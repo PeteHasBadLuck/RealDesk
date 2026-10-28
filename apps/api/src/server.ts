@@ -121,7 +121,7 @@ app.get("/api/contacts", { preHandler: [app.authenticate] }, async req => {
   const where: any = { companyId: req.session.companyId };
   const and: any[] = [];
   if (req.session.role === "AGENT") and.push({ OR: [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }] });
-  if (status && ["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","DO_NOT_CALL","CONVERTED"].includes(status)) where.status = status;
+  if (status && ["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","WRONG_NUMBER","DO_NOT_CALL","CONVERTED"].includes(status)) where.status = status;
   if (q) and.push({ OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { email: { contains: q, mode: "insensitive" } }, { companyName: { contains: q, mode: "insensitive" } }] });
   if (and.length) where.AND = and;
   return prisma.contact.findMany({ where, orderBy: { updatedAt: "desc" }, take: 500 });
@@ -265,7 +265,7 @@ app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (re
   if (!call) return reply.code(404).send({ error: "Call not found" });
   if (call.endedAt) return reply.code(409).send({ error: "Call is already finished" });
   const updated = await prisma.callRecord.update({ where: { id }, data: { status: p.data.status, disposition: p.data.disposition, notes: p.data.notes, durationSec: p.data.durationSec, endedAt: new Date() } });
-  const statusMap: Record<string,string> = { INTERESTED: "INTERESTED", CALLBACK_REQUESTED: "CALLBACK", NOT_INTERESTED: "NOT_INTERESTED", SALE_COMPLETED: "CONVERTED", DO_NOT_CALL: "DO_NOT_CALL" };
+  const statusMap: Record<string,string> = { INTERESTED: "INTERESTED", CALLBACK_REQUESTED: "CALLBACK", NOT_INTERESTED: "NOT_INTERESTED", WRONG_NUMBER: "WRONG_NUMBER", SALE_COMPLETED: "CONVERTED", DO_NOT_CALL: "DO_NOT_CALL" };
   const contactStatus = statusMap[p.data.disposition];
   if (call.contactId && contactStatus) await prisma.contact.updateMany({ where: { id: call.contactId, companyId: req.session.companyId }, data: { status: contactStatus as any, ...(p.data.disposition === "DO_NOT_CALL" ? { doNotCall: true } : {}) } });
   await audit(req.session.companyId, req.session.sub, "call.finished", "CallRecord", id, { disposition: p.data.disposition, status: p.data.status });
