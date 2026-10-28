@@ -119,9 +119,11 @@ app.get("/api/contacts", { preHandler: [app.authenticate] }, async req => {
   const q = (req.query as any)?.q?.toString().slice(0, 100);
   const status = (req.query as any)?.status?.toString();
   const where: any = { companyId: req.session.companyId };
-  if (req.session.role === "AGENT") where.OR = [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }];
+  const and: any[] = [];
+  if (req.session.role === "AGENT") and.push({ OR: [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }] });
   if (status && ["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","DO_NOT_CALL","CONVERTED"].includes(status)) where.status = status;
-  if (q) where.OR = [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { email: { contains: q, mode: "insensitive" } }, { companyName: { contains: q, mode: "insensitive" } }];
+  if (q) and.push({ OR: [{ firstName: { contains: q, mode: "insensitive" } }, { lastName: { contains: q, mode: "insensitive" } }, { phone: { contains: q } }, { email: { contains: q, mode: "insensitive" } }, { companyName: { contains: q, mode: "insensitive" } }] });
+  if (and.length) where.AND = and;
   return prisma.contact.findMany({ where, orderBy: { updatedAt: "desc" }, take: 500 });
 });
 const contactSchema = z.object({ firstName: z.string().min(1).max(100), lastName: z.string().max(100).optional().default(""), phone: z.string().min(3).max(40), email: z.string().email().max(254).optional().or(z.literal("")), companyName: z.string().max(160).optional(), status: z.enum(["NEW","CALLBACK","INTERESTED","NOT_INTERESTED","DO_NOT_CALL","CONVERTED"]).optional(), notes: z.string().max(5000).optional(), doNotCall: z.boolean().optional() });
