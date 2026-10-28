@@ -150,7 +150,7 @@ export default function App(){
    const ua=await ensurePhone(config);
    const call=await request<Call>("/api/calls",{method:"POST",body:JSON.stringify({contactId:contact.id,direction,recordingConsent:recordConsent})});
    const target="sip:"+contact.phone.replace(/[^\d+*#]/g,"")+"@"+config.sipDomain;
-   const session=ua.call(target,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
+   const session=ua.call(target,{mediaConstraints:{audio:true,video:false},pcConfig:{iceServers:config.iceServers?.length?config.iceServers:[{urls:"stun:stun.l.google.com:19302"}]},rtcOfferConstraints:{offerToReceiveAudio:true}});
    wireSession(session,call,contact,config,recordConsent);
    flash("Calling "+contact.firstName+"…");
   }catch(err:any){flash(err.name==="NotAllowedError"?"Microphone permission was denied. Allow microphone access in your browser.":err.message||"Could not start call")}
