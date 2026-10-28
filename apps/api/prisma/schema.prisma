@@ -61,6 +61,7 @@ model User {
   sipUsername  String?
   sipDomain    String?
   encryptedSipSecret String?
+  sessionVersion  Int      @default(0)
   createdAt    DateTime @default(now())
   calls        CallRecord[] @relation("AgentCalls")
   @@unique([companyId, email])
