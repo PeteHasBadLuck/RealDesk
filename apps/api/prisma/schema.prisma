@@ -81,6 +81,7 @@ model Contact {
   notes       String?
   customData  Json?
   doNotCall   Boolean       @default(false)
+  callbackAt  DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   campaignLinks CampaignContact[]
