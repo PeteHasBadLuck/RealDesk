@@ -350,7 +350,7 @@ app.post("/api/calls", { preHandler: [app.authenticate] }, async (req, reply) =>
   if (p.data.contactId) {
     const contact = await prisma.contact.findFirst({ where: { id: p.data.contactId, companyId: req.session.companyId, ...(req.session.role === "AGENT" ? { AND: [{ OR: [{ campaignLinks: { some: { assignedTo: req.session.sub } } }, { campaignLinks: { none: {} } }] }] } : {}) } });
     if (!contact) return reply.code(404).send({ error: "Contact not found or not assigned to you" });
-    if (p.data.direction === "OUTBOUND" && (contact.doNotCall || contact.status === "DO_NOT_CALL")) return reply.code(403).send({ error: "Outbound calling is blocked for this contact (do-not-call)" });
+    if (p.data.direction === "OUTBOUND" && (contact.doNotCall || contact.status === "DO_NOT_CALL" || contact.status === "WRONG_NUMBER")) return reply.code(403).send({ error: contact.status === "WRONG_NUMBER" ? "Outbound calling is blocked because this contact was marked as a wrong number." : "Outbound calling is blocked for this contact (do-not-call)" });
   }
   const call = await prisma.callRecord.create({ data: { ...p.data, companyId: req.session.companyId, agentId: req.session.sub, status: "INITIATED" } });
   await audit(req.session.companyId, req.session.sub, "call.created", "CallRecord", call.id, { direction: p.data.direction, recordingConsent: p.data.recordingConsent });
