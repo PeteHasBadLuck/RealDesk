@@ -304,11 +304,18 @@ app.get("/api/voip/client-config", { preHandler: [app.authenticate] }, async (re
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64"));
     decipher.setAuthTag(Buffer.from(tagText, "base64"));
     const password = Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
+    let iceServers: any[] | undefined;
+    if (companyConfig.encryptedIceServers) {
+      const [iceIv, iceTag, iceCiphertext] = companyConfig.encryptedIceServers.split(".");
+      const iceDecipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iceIv, "base64"));
+      iceDecipher.setAuthTag(Buffer.from(iceTag, "base64"));
+      iceServers = JSON.parse(Buffer.concat([iceDecipher.update(Buffer.from(iceCiphertext, "base64")), iceDecipher.final()]).toString("utf8"));
+    }
     await audit(req.session.companyId, req.session.sub, "voip.client_config_accessed", "VoipConfig", companyConfig.id);
     return {
       uri: `sip:${sipUsername}@${sipDomain}`, sipDomain, websocketUrl: companyConfig.websocketUrl,
       username: sipUsername, password, displayName: user.name,
-      recordingEnabled: companyConfig.recordingEnabled, recordingNoticeText: companyConfig.recordingNoticeText
+      recordingEnabled: companyConfig.recordingEnabled, recordingNoticeText: companyConfig.recordingNoticeText, iceServers
     };
   } catch {
     return reply.code(503).send({ error: "VoIP credentials could not be decrypted; check the server encryption key" });
@@ -318,17 +325,33 @@ app.get("/api/voip/config", { preHandler: [app.authenticate] }, async (req, repl
   if (!requireRole(req, reply, adminRoles)) return;
   const v = await prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } });
   if (!v) return { configured: false };
-  return { configured: true, provider: v.provider, sipDomain: v.sipDomain, sipUsername: v.sipUsername, outboundCallerId: v.outboundCallerId, websocketUrl: v.websocketUrl, recordingEnabled: v.recordingEnabled, recordingNoticeText: v.recordingNoticeText, hasSecret: Boolean(v.encryptedSecret) };
+  return { configured: true, provider: v.provider, sipDomain: v.sipDomain, sipUsername: v.sipUsername, outboundCallerId: v.outboundCallerId, websocketUrl: v.websocketUrl, recordingEnabled: v.recordingEnabled, recordingNoticeText: v.recordingNoticeText, hasSecret: Boolean(v.encryptedSecret), hasIceServers: Boolean(v.encryptedIceServers) };
 });
 app.put("/api/voip/config", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, adminRoles)) return;
-  const p = z.object({ provider: z.string().min(1).max(80), sipDomain: z.string().min(1).max(255), sipUsername: z.string().min(1).max(255), sipPassword: z.string().min(1).max(500).optional(), outboundCallerId: z.string().max(50).optional(), websocketUrl: z.string().url().optional().or(z.literal("")), recordingEnabled: z.boolean().default(false), recordingNoticeText: z.string().max(1000).optional() }).safeParse(req.body);
+  const p = z.object({ provider: z.string().min(1).max(80), sipDomain: z.string().min(1).max(255), sipUsername: z.string().min(1).max(255), sipPassword: z.string().min(1).max(500).optional(), outboundCallerId: z.string().max(50).optional(), websocketUrl: z.string().url().optional().or(z.literal("")), recordingEnabled: z.boolean().default(false), recordingNoticeText: z.string().max(1000).optional(), iceServersJson: z.string().max(4000).optional(), clearIceServers: z.boolean().optional() }).safeParse(req.body);
   if (!p.success) return reply.code(400).send({ error: "Invalid VoIP configuration" });
   if (!p.data.sipPassword && !await prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } })) return reply.code(400).send({ error: "SIP password is required for first setup" });
   const cryptoKey = process.env.VOIP_ENCRYPTION_KEY;
   if (p.data.sipPassword && (!cryptoKey || cryptoKey.length < 32)) return reply.code(503).send({ error: "Server administrator must configure VOIP_ENCRYPTION_KEY (32+ characters) before storing credentials" });
-  // AES-GCM encryption: never store a VoIP password in plaintext.
+  // ICE server configuration may include TURN usernames/passwords, so encrypt it too.
+  let iceServers: any[] | undefined;
+  if (p.data.iceServersJson?.trim()) {
+    let parsedJson: unknown;
+    try { parsedJson = JSON.parse(p.data.iceServersJson); } catch { return reply.code(400).send({ error: "ICE servers must be valid JSON." }); }
+    const iceSchema = z.array(z.object({
+      urls: z.union([z.string().min(1).max(500), z.array(z.string().min(1).max(500)).min(1).max(8)]),
+      username: z.string().max(255).optional(),
+      credential: z.string().max(500).optional(),
+      credentialType: z.enum(["password", "oauth"]).optional()
+    })).min(1).max(10);
+    const parsed = iceSchema.safeParse(parsedJson);
+    if (!parsed.success) return reply.code(400).send({ error: "ICE servers must be an array of objects with urls and optional username/credential fields." });
+    iceServers = parsed.data;
+  }
+  // AES-GCM encryption: never store VoIP or TURN passwords in plaintext.
   let encryptedSecret: string | undefined;
+  let encryptedIceServers: string | undefined;
   if (p.data.sipPassword) {
     const crypto = await import("node:crypto");
     const key = crypto.createHash("sha256").update(cryptoKey!).digest();
@@ -337,8 +360,20 @@ app.put("/api/voip/config", { preHandler: [app.authenticate] }, async (req, repl
     const encrypted = Buffer.concat([cipher.update(p.data.sipPassword, "utf8"), cipher.final()]);
     encryptedSecret = [iv.toString("base64"), cipher.getAuthTag().toString("base64"), encrypted.toString("base64")].join(".");
   }
+  if (iceServers) {
+    if (!cryptoKey || cryptoKey.length < 32) return reply.code(503).send({ error: "VOIP_ENCRYPTION_KEY is required to encrypt ICE server credentials." });
+    const crypto = await import("node:crypto");
+    const key = crypto.createHash("sha256").update(cryptoKey).digest();
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+    const encrypted = Buffer.concat([cipher.update(JSON.stringify(iceServers), "utf8"), cipher.final()]);
+    encryptedIceServers = [iv.toString("base64"), cipher.getAuthTag().toString("base64"), encrypted.toString("base64")].join(".");
+  }
   const data: any = { provider: p.data.provider, sipDomain: p.data.sipDomain, sipUsername: p.data.sipUsername, outboundCallerId: p.data.outboundCallerId, websocketUrl: p.data.websocketUrl || null, recordingEnabled: p.data.recordingEnabled, recordingNoticeText: p.data.recordingNoticeText };
   if (encryptedSecret) data.encryptedSecret = encryptedSecret;
+  if (encryptedIceServers) data.encryptedIceServers = encryptedIceServers;
+  if (p.data.clearIceServers && iceServers) return reply.code(400).send({ error: "Do not set both ICE server JSON and clearIceServers." });
+  if (p.data.clearIceServers) data.encryptedIceServers = null;
   const config = await prisma.voipConfig.upsert({ where: { companyId: req.session.companyId }, create: { ...data, companyId: req.session.companyId, encryptedSecret: encryptedSecret! }, update: data });
   await audit(req.session.companyId, req.session.sub, "voip.configured", "VoipConfig", config.id);
   return { ok: true, configured: true };
