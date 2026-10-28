@@ -248,7 +248,11 @@ app.get("/api/calls", { preHandler: [app.authenticate] }, async req => {
 app.post("/api/calls", { preHandler: [app.authenticate] }, async (req, reply) => {
   const p = z.object({ contactId: z.string().optional(), direction: z.enum(["INBOUND","OUTBOUND"]), providerCallId: z.string().max(200).optional(), recordingConsent: z.boolean().default(false) }).safeParse(req.body);
   if (!p.success) return reply.code(400).send({ error: "Invalid call details" });
-  if (p.data.contactId && !await prisma.contact.findFirst({ where: { id: p.data.contactId, companyId: req.session.companyId } })) return reply.code(404).send({ error: "Contact not found" });
+  if (p.data.contactId) {
+    const contact = await prisma.contact.findFirst({ where: { id: p.data.contactId, companyId: req.session.companyId } });
+    if (!contact) return reply.code(404).send({ error: "Contact not found" });
+    if (p.data.direction === "OUTBOUND" && (contact.doNotCall || contact.status === "DO_NOT_CALL")) return reply.code(403).send({ error: "Outbound calling is blocked for this contact (do-not-call)" });
+  }
   const call = await prisma.callRecord.create({ data: { ...p.data, companyId: req.session.companyId, agentId: req.session.sub, status: "INITIATED" } });
   await audit(req.session.companyId, req.session.sub, "call.created", "CallRecord", call.id);
   return reply.code(201).send(call);
