@@ -68,6 +68,25 @@ async function main() {
 
   const owner = await login(ownerEmail, ownerPassword);
   assert.equal(owner.user.role, "OWNER");
+
+  await call("/api/auth/register-company", {
+    method: "POST", expected: 400,
+    body: { companyName: "Tiny", name: "New Owner", email: "weakpass@realdesk.test", password: "short" }
+  });
+  const secondRegistration = await call("/api/auth/register-company", {
+    method: "POST", expected: 201,
+    body: { companyName: "Second Test Company", name: "Second Owner", email: "owner2@realdesk.test", password: "CI_Second_Company_Owner_Password_9284!" }
+  });
+  assert.equal(secondRegistration.data.user.role, "OWNER");
+  assert.equal(secondRegistration.data.user.company.name, "Second Test Company");
+  await call("/api/auth/register-company", {
+    method: "POST", expected: 409,
+    body: { companyName: "Duplicate Email", name: "Duplicate Owner", email: "owner2@realdesk.test", password: "CI_Second_Company_Owner_Password_9284!" }
+  });
+  const isolatedCompanyContact = await createContact(secondRegistration.data.token, "Isolated", "+34919999999");
+  const ownerOneContacts = await call("/api/contacts", { token: owner.token });
+  assert.ok(!ownerOneContacts.data.some(c => c.id === isolatedCompanyContact.id), "company contacts must not leak across tenants");
+  await call("/api/contacts/" + isolatedCompanyContact.id, { token: owner.token, expected: 404 });
   const unauthenticated = await call("/api/contacts", { expected: 401 });
   assert.ok(unauthenticated.data.error);
 
