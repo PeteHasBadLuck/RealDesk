@@ -138,6 +138,22 @@ async function main() {
   const contact2 = await createContact(owner.token, "Bob", "+34910000002");
   const contact3 = await createContact(owner.token, "Charlie", "+34910000003");
 
+  const csvCallbackAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+  const csvContent = [
+    "firstName,lastName,phone,email,company,status,notes,doNotCall,callbackAt",
+    "CSVImport,Test,+34919999997,csv-import@example.test,Imported Co,CALLBACK,Imported callback note,false," + csvCallbackAt
+  ].join("\r\n");
+  const csvForm = new FormData();
+  csvForm.append("file", new Blob([csvContent], { type: "text/csv" }), "contacts.csv");
+  const csvImported = await call("/api/contacts/import", { method: "POST", token: owner.token, form: csvForm, expected: 201 });
+  assert.equal(csvImported.data.imported, 1);
+  const contactsAfterImport = await call("/api/contacts", { token: owner.token });
+  const importedContact = contactsAfterImport.data.find(contact => contact.phone === "+34919999997");
+  assert.ok(importedContact, "CSV contact should be stored");
+  assert.equal(importedContact.status, "CALLBACK");
+  assert.equal(importedContact.notes, "Imported callback note");
+  assert.equal(importedContact.callbackAt, csvCallbackAt);
+
   const campaign = (await call("/api/campaigns", {
     method: "POST",
     token: owner.token,
