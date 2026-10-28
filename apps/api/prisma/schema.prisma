@@ -38,6 +38,13 @@ enum CallStatus {
   MISSED
 }
 
+enum AgentPresence {
+  OFFLINE
+  AVAILABLE
+  AWAY
+  ON_BREAK
+}
+
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -58,6 +65,7 @@ model User {
   passwordHash String
   role         Role     @default(AGENT)
   active       Boolean  @default(true)
+  presence     AgentPresence @default(OFFLINE)
   sipUsername  String?
   sipDomain    String?
   encryptedSipSecret String?
