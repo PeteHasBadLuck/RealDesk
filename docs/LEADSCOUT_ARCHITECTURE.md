@@ -67,3 +67,22 @@ This is a target structure, not a claim that these new apps already exist. Move 
 ## Deployment
 
 The parent platform can be deployed as a hosted web workspace with the shared API, PostgreSQL, and a background job worker. RealDesk can be enabled in the same deployment or deployed separately against the same authenticated platform API. Customers should not need local development tools. Before real customer data is used, validate authentication boundaries, key encryption, provider terms, privacy obligations, backup/restore, and deletion workflows.
+
+
+## Current MVP status
+
+Implemented in the current repository:
+- LeadScout parent workspace at `/leadscout.html`, using the existing company login
+- Company-admin Brave Search key settings with authenticated encryption at rest
+- Prompt-based web search with a result cap, saved source URLs, job history, and CSV export
+- Per-lead enrichment that checks up to two public HTTP(S) pages with time, redirect, and response-size limits; extracts candidate email and phone values and stores the source URL for each extracted field
+- Explicit review status and selected-lead import into a company-owned RealDesk campaign
+- Campaign import reuses exact-phone matches in the same company and skips leads without a valid phone
+- API smoke tests for provider-key secrecy/isolation and validation of enrichment/import routes
+
+Limitations that remain:
+- Extracted phone/email values are heuristic candidates, not verified facts; false positives and missing values are possible.
+- Search result snippets and company titles may not reliably identify a real business. Users must review source pages before outreach.
+- The page fetcher checks DNS results before making requests and revalidates redirects, but any public-web fetcher needs ongoing SSRF/security review and should run with restricted network egress in production.
+- No background queue, deeper multi-page crawl, advanced deduplication by normalized phone/domain, provider usage billing dashboard, or direct automatic campaign enrollment is included.
+- Privacy, marketing, opt-out, retention, provider terms, and jurisdiction-specific compliance review are required before production outreach.
