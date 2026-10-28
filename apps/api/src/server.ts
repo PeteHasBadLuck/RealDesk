@@ -766,6 +766,16 @@ app.post("/api/leadscout/leads/:id/enrich", { preHandler: [app.authenticate], co
   await audit(req.session.companyId, req.session.sub, "leadscout.lead_enriched", "LeadRecord", lead.id, { emailFound: Boolean(email), phoneFound: Boolean(phone), sourcesChecked: checkedSources.length });
   return { lead: updated, emailsFound: foundEmails, phonesFound: foundPhones, sourcesChecked: checkedSources, hasPhone: Boolean(phone), hasEmail: Boolean(email), emailSourceUrl: updated.emailSourceUrl, phoneSourceUrl: updated.phoneSourceUrl, enrichedAt: updated.enrichedAt };
 });
+
+app.post("/api/leadscout/leads/review", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const parsed = z.object({ leadIds: z.array(z.string().min(1)).min(1).max(200) }).safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: "Select between 1 and 200 leads to review." });
+  const result = await prisma.leadRecord.updateMany({ where: { companyId: req.session.companyId, id: { in: parsed.data.leadIds } }, data: { reviewed: true } });
+  if (!result.count) return reply.code(400).send({ error: "No selected leads belong to this company." });
+  await audit(req.session.companyId, req.session.sub, "leadscout.leads_reviewed", "LeadRecord", undefined, { count: result.count });
+  return { reviewed: result.count };
+});
 app.post("/api/leadscout/import-to-campaign", { preHandler: [app.authenticate] }, async (req, reply) => {
   if (!requireRole(req, reply, supervisorRoles)) return;
   const parsed = z.object({ campaignId: z.string().min(1), leadIds: z.array(z.string().min(1)).min(1).max(200), assignedTo: z.string().nullable().optional() }).safeParse(req.body);
@@ -778,6 +788,7 @@ app.post("/api/leadscout/import-to-campaign", { preHandler: [app.authenticate] }
   }
   const leads = await prisma.leadRecord.findMany({ where: { id: { in: parsed.data.leadIds }, companyId: req.session.companyId } });
   if (!leads.length) return reply.code(400).send({ error: "No selected leads belong to this company." });
+  if (leads.some(lead => !lead.reviewed)) return reply.code(400).send({ error: "Review all selected leads before importing them into a campaign." });
   let created = 0, linked = 0, skippedNoPhone = 0, reused = 0;
   for (const lead of leads) {
     const phone = (lead.phone || "").trim();
