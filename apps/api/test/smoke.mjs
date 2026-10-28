@@ -136,6 +136,7 @@ async function main() {
   const agent2 = await createAgent(owner.token, "Agent Two", "agent2@realdesk.test", "1002");
   const contact1 = await createContact(owner.token, "Alice", "+34910000001");
   const contact2 = await createContact(owner.token, "Bob", "+34910000002");
+  const contact3 = await createContact(owner.token, "Charlie", "+34910000003");
 
   const campaign = (await call("/api/campaigns", {
     method: "POST",
@@ -222,11 +223,29 @@ async function main() {
   });
   const wrongNumberContact = await call("/api/contacts/" + contact2.id, { token: owner.token });
   assert.equal(wrongNumberContact.data.status, "WRONG_NUMBER");
+  await call("/api/calls", { method: "POST", token: agent2Login.token, expected: 403, body: { contactId: contact2.id, direction: "OUTBOUND" } });
+
+  const callbackCall = (await call("/api/calls", {
+    method: "POST", token: agentLogin.token, expected: 201,
+    body: { contactId: contact3.id, direction: "OUTBOUND" }
+  })).data;
+  await call("/api/calls/" + callbackCall.id + "/finish", {
+    method: "PATCH", token: agentLogin.token, expected: 400,
+    body: { disposition: "CALLBACK_REQUESTED", notes: "callback missing time", durationSec: 10, status: "COMPLETED" }
+  });
+  const callbackAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await call("/api/calls/" + callbackCall.id + "/finish", {
+    method: "PATCH", token: agentLogin.token,
+    body: { disposition: "CALLBACK_REQUESTED", callbackAt, notes: "CI callback schedule test", durationSec: 10, status: "COMPLETED" }
+  });
+  const callbackContact = await call("/api/contacts/" + contact3.id, { token: owner.token });
+  assert.equal(callbackContact.data.status, "CALLBACK");
+  assert.ok(Math.abs(new Date(callbackContact.data.callbackAt).getTime() - new Date(callbackAt).getTime()) < 1000, "callback date/time should persist");
 
   const audit = await call("/api/audit", { token: owner.token });
   assert.ok(audit.data.some(event => event.action === "call.recording_played"));
   assert.ok(audit.data.some(event => event.action === "call.finished"));
-  console.log("RealDesk API smoke tests passed: login, role checks, SIP secret encryption, ICE configuration, contact assignment, DNC, dispositions, encrypted recording upload/playback, and audit log.");
+  console.log("RealDesk API smoke tests passed: login, role checks, SIP secret encryption, ICE configuration, contact assignment, DNC, dispositions, encrypted recording upload/playback, scheduled callbacks, and audit log.");
 }
 
 main().catch(error => {
