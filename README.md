@@ -9,13 +9,15 @@ Open `/leadscout.html` after deployment and sign in with the same company accoun
 - Company-admin settings for a Brave Search API key, encrypted at rest using the server encryption key; saved secrets are never returned to the browser
 - Prompt-based web research with a bounded result count, source URLs, descriptions, and collection timestamps
 - Tenant-scoped saved results and research history, plus CSV export
+- Bounded public-page enrichment for candidate phone/email fields with field-level source links
+- Explicit review status and selected-lead import into a company-owned RealDesk campaign, skipping leads without a valid phone
 - A link to the RealDesk contact-center companion
 
-The current research MVP uses web-search results as sourced prospect candidates. It does **not** yet crawl pages for structured phone/email enrichment, verify that each result is a real business, or automatically import leads into RealDesk campaigns. Review source links and verify data before outreach. Provider usage and terms may incur costs.
+The current research MVP stores web-search results as sourced prospect candidates. Users can enrich an individual lead by checking its public result and website pages for candidate phone numbers and email addresses; the UI shows the source URL where an extracted field was found. Extraction is heuristic and does not verify ownership or accuracy, so review every result before outreach. Users explicitly mark leads reviewed before importing selected leads with valid phone numbers into a chosen RealDesk campaign. CSV export includes phone and email fields. Website fetching is bounded by time/size limits, follows only a few redirects, rejects private-network targets, and does not bypass logins or anti-bot controls. Provider usage and terms may incur costs.
 
 ## RealDesk companion
 
-RealDesk is the contact-center component of the LeadScout product family. It currently has role-based admin/supervisor and agent workspaces backed by the same API and database. LeadScout and RealDesk share the existing company login; the broader shared settings and seamless list-to-campaign handoff remain future work.
+RealDesk is the contact-center component of the LeadScout product family. It currently has role-based admin/supervisor and agent workspaces backed by the same API and database. LeadScout and RealDesk share the existing company login, and reviewed leads can now be handed off to a company-scoped RealDesk campaign.
 
 ## Product workspaces
 
