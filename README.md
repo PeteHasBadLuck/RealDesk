@@ -26,9 +26,11 @@ RealDesk is an open-source, self-hosted contact-center application inspired by m
 - Data: PostgreSQL + Prisma
 - Deployment: Docker Compose; Render blueprint included as an online hosting option
 
-## Run on a server
+## Deploy online without installing anything locally
 
-See [self-hosting deployment instructions](docs/DEPLOYMENT.md). You do not need to install development tools on your personal laptop if you deploy the repository to a supported cloud host.
+[Deploy RealDesk on Render](https://render.com/deploy?repo=https://github.com/PeteHasBadLuck/RealDesk) using the included `render.yaml` blueprint. Render will ask you to connect GitHub and review the services, database, persistent recording disk, and any charges before deploying. After provisioning, set the initial administrator email and a unique password in the API service environment, redeploy, open the frontend URL, and sign in. The API and frontend are separate hosted services; the agent portal is `/agent.html` and the admin portal is `/admin.html`.
+
+For self-hosting on a server you control, see [deployment instructions](docs/DEPLOYMENT.md). You do not need to install development tools on your personal laptop.
 
 ## Current implementation status
 
