@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { saveEncryptedRecording, readEncryptedRecording } from "./recordings.js";
 
@@ -539,6 +540,106 @@ app.get("/api/recordings/:id/audio", { preHandler: [app.authenticate] }, async (
     req.log.error({ err: error }, "Recording playback failed");
     return reply.code(503).send({ error: "Recording file is unavailable or cannot be decrypted" });
   }
+});
+
+function encryptLeadScoutSecret(value: string) {
+  const secretKey = process.env.VOIP_ENCRYPTION_KEY;
+  if (!secretKey || secretKey.length < 32) throw new Error("Server administrator must configure VOIP_ENCRYPTION_KEY (32+ characters).");
+  const key = Buffer.from(secretKey).subarray(0, 32);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return [iv.toString("base64"), cipher.getAuthTag().toString("base64"), encrypted.toString("base64")].join(".");
+}
+function decryptLeadScoutSecret(value: string) {
+  const secretKey = process.env.VOIP_ENCRYPTION_KEY;
+  if (!secretKey || secretKey.length < 32) throw new Error("Server encryption key is not configured.");
+  const [ivText, tagText, encryptedText] = value.split(".");
+  const decipher = createDecipheriv("aes-256-gcm", Buffer.from(secretKey).subarray(0, 32), Buffer.from(ivText, "base64"));
+  decipher.setAuthTag(Buffer.from(tagText, "base64"));
+  return Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
+}
+app.get("/api/leadscout/providers", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, adminRoles)) return;
+  const rows = await prisma.integrationCredential.findMany({ where: { companyId: req.session.companyId }, select: { provider: true, updatedAt: true } });
+  return { providers: [{ provider: "brave", label: "Brave Search", configured: rows.some(x => x.provider === "brave"), updatedAt: rows.find(x => x.provider === "brave")?.updatedAt || null }] };
+});
+app.put("/api/leadscout/providers/:provider", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, adminRoles)) return;
+  const provider = String((req.params as any).provider || "").toLowerCase();
+  if (provider !== "brave") return reply.code(400).send({ error: "Unsupported provider." });
+  const parsed = z.object({ apiKey: z.string().trim().min(10).max(500) }).safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: "Enter a valid provider API key." });
+  let encryptedApiKey: string;
+  try { encryptedApiKey = encryptLeadScoutSecret(parsed.data.apiKey); }
+  catch (e: any) { return reply.code(503).send({ error: e.message }); }
+  await prisma.integrationCredential.upsert({
+    where: { companyId_provider: { companyId: req.session.companyId, provider } },
+    create: { companyId: req.session.companyId, provider, encryptedApiKey },
+    update: { encryptedApiKey }
+  });
+  await audit(req.session.companyId, req.session.sub, "leadscout.provider_key_saved", "IntegrationCredential", provider);
+  return reply.code(200).send({ provider, configured: true, message: "Provider key saved securely." });
+});
+app.delete("/api/leadscout/providers/:provider", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, adminRoles)) return;
+  const provider = String((req.params as any).provider || "").toLowerCase();
+  await prisma.integrationCredential.deleteMany({ where: { companyId: req.session.companyId, provider } });
+  await audit(req.session.companyId, req.session.sub, "leadscout.provider_key_deleted", "IntegrationCredential", provider);
+  return { provider, configured: false };
+});
+app.get("/api/leadscout/jobs", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  return prisma.leadResearchJob.findMany({ where: { companyId: req.session.companyId }, include: { _count: { select: { leads: true } } }, orderBy: { createdAt: "desc" }, take: 50 });
+});
+app.get("/api/leadscout/leads", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const query = z.object({ q: z.string().max(200).optional() }).safeParse(req.query);
+  if (!query.success) return reply.code(400).send({ error: "Invalid search filter." });
+  const q = query.data.q?.trim();
+  return prisma.leadRecord.findMany({ where: { companyId: req.session.companyId, ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { description: { contains: q, mode: "insensitive" } }, { location: { contains: q, mode: "insensitive" } }] } : {}) }, orderBy: { createdAt: "desc" }, take: 500 });
+});
+app.post("/api/leadscout/research", { preHandler: [app.authenticate], config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const parsed = z.object({ prompt: z.string().trim().min(12).max(1000), count: z.number().int().min(1).max(20).default(10) }).safeParse(req.body);
+  if (!parsed.success) return reply.code(400).send({ error: "Describe the businesses you want (12–1000 characters) and choose 1–20 results." });
+  const credential = await prisma.integrationCredential.findUnique({ where: { companyId_provider: { companyId: req.session.companyId, provider: "brave" } } });
+  if (!credential) return reply.code(400).send({ error: "Add a Brave Search API key in LeadScout settings before researching." });
+  let apiKey: string;
+  try { apiKey = decryptLeadScoutSecret(credential.encryptedApiKey); }
+  catch (e: any) { req.log.error({ err: e }, "LeadScout key decryption failed"); return reply.code(503).send({ error: "Could not decrypt provider key; check the server encryption key." }); }
+  const job = await prisma.leadResearchJob.create({ data: { companyId: req.session.companyId, createdBy: req.session.sub, prompt: parsed.data.prompt, status: "RUNNING" } });
+  try {
+    const url = new URL("https://api.search.brave.com/res/v1/web/search");
+    url.searchParams.set("q", parsed.data.prompt);
+    url.searchParams.set("count", String(parsed.data.count));
+    const response = await fetch(url, { headers: { "X-Subscription-Token": apiKey, "Accept": "application/json" }, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) {
+      await prisma.leadResearchJob.update({ where: { id: job.id }, data: { status: "FAILED" } });
+      req.log.warn({ status: response.status }, "LeadScout provider request failed");
+      return reply.code(response.status === 401 || response.status === 403 ? 502 : 503).send({ error: response.status === 401 || response.status === 403 ? "Provider rejected this API key. Check it in settings." : "Search provider is temporarily unavailable." });
+    }
+    const data: any = await response.json();
+    const results = (Array.isArray(data?.web?.results) ? data.web.results : []).slice(0, parsed.data.count)
+      .filter((x: any) => typeof x.url === "string" && typeof x.title === "string" && /^https?:\/\//i.test(x.url))
+      .map((x: any) => ({ companyId: req.session.companyId, jobId: job.id, name: String(x.title).slice(0, 300), website: new URL(x.url).origin, description: String(x.description || "").slice(0, 2000), sourceUrl: String(x.url).slice(0, 2000) }));
+    if (results.length) await prisma.leadRecord.createMany({ data: results, skipDuplicates: true });
+    const saved = await prisma.leadRecord.count({ where: { companyId: req.session.companyId, jobId: job.id } });
+    await prisma.leadResearchJob.update({ where: { id: job.id }, data: { status: "COMPLETED", resultCount: saved } });
+    await audit(req.session.companyId, req.session.sub, "leadscout.research_completed", "LeadResearchJob", job.id, { results: saved });
+    return { jobId: job.id, prompt: job.prompt, resultCount: saved, leads: await prisma.leadRecord.findMany({ where: { companyId: req.session.companyId, jobId: job.id }, orderBy: { createdAt: "desc" } }) };
+  } catch (e: any) {
+    await prisma.leadResearchJob.update({ where: { id: job.id }, data: { status: "FAILED" } }).catch(() => {});
+    req.log.error({ err: e }, "LeadScout research failed");
+    return reply.code(503).send({ error: "Research failed due to a provider or network error. Please try again." });
+  }
+});
+app.get("/api/leadscout/export.csv", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (!requireRole(req, reply, supervisorRoles)) return;
+  const leads = await prisma.leadRecord.findMany({ where: { companyId: req.session.companyId }, orderBy: { createdAt: "desc" }, take: 5000 });
+  const cell = (v: unknown) => { const value = String(v ?? ""); return /^[=+@\-\t\r]/.test(value) ? "'" + value : value; };
+  const csv = ["Name,Website,Description,Source URL,Collected At", ...leads.map(x => [x.name,x.website,x.description,x.sourceUrl,x.createdAt.toISOString()].map(v => '"' + cell(v).replaceAll('"','""') + '"').join(","))].join("\r\n");
+  return reply.header("Content-Type", "text/csv; charset=utf-8").header("Content-Disposition", 'attachment; filename="leadscout-leads.csv"').send(csv);
 });
 app.get("/api/reports/summary", { preHandler: [app.authenticate] }, async req => {
   const companyId = req.session.companyId;
