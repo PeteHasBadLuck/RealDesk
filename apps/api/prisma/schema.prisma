@@ -54,6 +54,9 @@ model Company {
   campaigns Campaign[]
   voip      VoipConfig?
   calls     CallRecord[]
+  integrationCredentials IntegrationCredential[]
+  leadResearchJobs LeadResearchJob[]
+  leadRecords LeadRecord[]
 }
 
 model User {
@@ -173,5 +176,48 @@ model AuditLog {
   entityId  String?
   metadata  Json?
   createdAt DateTime @default(now())
+  @@index([companyId, createdAt])
+}
+
+model IntegrationCredential {
+  id              String   @id @default(cuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  provider        String
+  encryptedApiKey String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([companyId, provider])
+  @@index([companyId])
+}
+
+model LeadResearchJob {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy   String
+  prompt      String
+  status      String   @default("COMPLETED")
+  resultCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  leads       LeadRecord[]
+  @@index([companyId, createdAt])
+}
+
+model LeadRecord {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         LeadResearchJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  name        String
+  website     String?
+  description String?
+  sourceUrl   String
+  phone       String?
+  email       String?
+  location    String?
+  createdAt   DateTime @default(now())
+  @@unique([companyId, sourceUrl])
   @@index([companyId, createdAt])
 }
