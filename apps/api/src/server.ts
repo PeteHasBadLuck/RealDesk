@@ -266,7 +266,7 @@ app.post("/api/calls", { preHandler: [app.authenticate] }, async (req, reply) =>
     if (p.data.direction === "OUTBOUND" && (contact.doNotCall || contact.status === "DO_NOT_CALL")) return reply.code(403).send({ error: "Outbound calling is blocked for this contact (do-not-call)" });
   }
   const call = await prisma.callRecord.create({ data: { ...p.data, companyId: req.session.companyId, agentId: req.session.sub, status: "INITIATED" } });
-  await audit(req.session.companyId, req.session.sub, "call.created", "CallRecord", call.id);
+  await audit(req.session.companyId, req.session.sub, "call.created", "CallRecord", call.id, { direction: p.data.direction, recordingConsent: p.data.recordingConsent });
   return reply.code(201).send(call);
 });
 app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -285,6 +285,7 @@ app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (re
 });
 
 app.get("/api/voip/client-config", { preHandler: [app.authenticate] }, async (req, reply) => {
+  if (req.session.role !== "AGENT") return reply.code(403).send({ error: "Only call-agent accounts can retrieve browser SIP credentials." });
   const [companyConfig, user] = await Promise.all([
     prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } }),
     prisma.user.findFirst({ where: { id: req.session.sub, companyId: req.session.companyId, active: true } })
