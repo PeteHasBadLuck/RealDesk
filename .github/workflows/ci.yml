@@ -9,17 +9,68 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: realdesk
+          POSTGRES_USER: realdesk
+          POSTGRES_PASSWORD: realdesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U realdesk -d realdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      PORT: 3001
+      DATABASE_URL: postgresql://realdesk:realdesk@localhost:5432/realdesk?schema=public
+      JWT_SECRET: realdesk-ci-jwt-secret-do-not-use-in-production-123456
+      VOIP_ENCRYPTION_KEY: realdesk-ci-voip-key-do-not-use-in-production-123456
+      RECORDING_ENCRYPTION_KEY: realdesk-ci-recording-key-do-not-use-in-production-123456
+      RECORDINGS_DIR: /tmp/realdesk-recordings
+      CORS_ORIGIN: http://127.0.0.1:3001
+      SEED_ADMIN_EMAIL: owner@realdesk.test
+      SEED_ADMIN_PASSWORD: CI_Only_Admin_Password_9284!
+      SEED_COMPANY_NAME: CI Test Company
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm --workspace apps/api run db:generate
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/test
-      - run: npm --workspace apps/api run build
-      - run: npm --workspace apps/web run build
+      - name: Install dependencies
+        run: npm install
+      - name: Generate Prisma client
+        run: npm --workspace apps/api run db:generate
+      - name: Build API
+        run: npm --workspace apps/api run build
+      - name: Build web application
+        run: npm --workspace apps/web run build
+      - name: Validate database schema
+        run: npm --workspace apps/api run db:push
+      - name: Seed CI administrator
+        run: npm --workspace apps/api run db:seed
+      - name: Start API for smoke tests
+        run: |
+          mkdir -p "$RECORDINGS_DIR"
+          npm --workspace apps/api run start > "$RUNNER_TEMP/realdesk-api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/realdesk-api.pid"
+          for i in $(seq 1 40); do
+            if curl --fail --silent "http://127.0.0.1:$PORT/health" >/dev/null; then
+              echo "API ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/realdesk-api.log"
+          exit 1
+      - name: Exercise authentication, contacts, campaigns, calls and recordings
+        run: npm --workspace apps/api run test:smoke
+      - name: Show API log on failure
+        if: failure()
+        run: cat "$RUNNER_TEMP/realdesk-api.log" || true
       - name: Validate Compose configuration
         run: |
           cp .env.example .env
