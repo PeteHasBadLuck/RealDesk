@@ -216,17 +216,31 @@ app.patch("/api/calls/:id/finish", { preHandler: [app.authenticate] }, async (re
 });
 
 app.get("/api/voip/client-config", { preHandler: [app.authenticate] }, async (req, reply) => {
-  const config = await prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } });
-  if (!config || !config.websocketUrl) return reply.code(409).send({ error: "VoIP is not configured with a secure WebSocket URL" });
+  const [companyConfig, user] = await Promise.all([
+    prisma.voipConfig.findUnique({ where: { companyId: req.session.companyId } }),
+    prisma.user.findFirst({ where: { id: req.session.sub, companyId: req.session.companyId, active: true } })
+  ]);
+  if (!companyConfig || !companyConfig.websocketUrl) return reply.code(409).send({ error: "VoIP is not configured with a secure WebSocket URL" });
+  if (!user) return reply.code(401).send({ error: "Active user not found" });
+  const secret = user.encryptedSipSecret || companyConfig.encryptedSecret;
+  const sipUsername = user.encryptedSipSecret ? user.sipUsername : companyConfig.sipUsername;
+  const sipDomain = user.encryptedSipSecret ? user.sipDomain : companyConfig.sipDomain;
+  if (!secret || !sipUsername || !sipDomain) return reply.code(409).send({ error: "SIP credentials are incomplete for this agent" });
+  const cryptoKey = process.env.VOIP_ENCRYPTION_KEY;
+  if (!cryptoKey || cryptoKey.length < 32) return reply.code(503).send({ error: "Server encryption key is not configured" });
   const crypto = await import("node:crypto");
   try {
-    const [ivText, tagText, encryptedText] = config.encryptedSecret.split(".");
-    const key = crypto.createHash("sha256").update(process.env.VOIP_ENCRYPTION_KEY!).digest();
+    const [ivText, tagText, encryptedText] = secret.split(".");
+    const key = crypto.createHash("sha256").update(cryptoKey).digest();
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64"));
     decipher.setAuthTag(Buffer.from(tagText, "base64"));
     const password = Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
-    await audit(req.session.companyId, req.session.sub, "voip.client_config_accessed", "VoipConfig", config.id);
-    return { uri: `sip:${config.sipUsername}@${config.sipDomain}`, sipDomain: config.sipDomain, websocketUrl: config.websocketUrl, username: config.sipUsername, password, displayName: (await prisma.user.findUnique({ where: { id: req.session.sub } }))?.name || "RealDesk agent", recordingEnabled: config.recordingEnabled, recordingNoticeText: config.recordingNoticeText };
+    await audit(req.session.companyId, req.session.sub, "voip.client_config_accessed", "VoipConfig", companyConfig.id);
+    return {
+      uri: `sip:${sipUsername}@${sipDomain}`, sipDomain, websocketUrl: companyConfig.websocketUrl,
+      username: sipUsername, password, displayName: user.name,
+      recordingEnabled: companyConfig.recordingEnabled, recordingNoticeText: companyConfig.recordingNoticeText
+    };
   } catch {
     return reply.code(503).send({ error: "VoIP credentials could not be decrypted; check the server encryption key" });
   }
