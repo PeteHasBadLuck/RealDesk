@@ -41,13 +41,16 @@ Implemented in the repository:
 - Campaign creation
 - Call records and required call disposition endpoint
 - VoIP settings form and encrypted-at-rest credential storage
+- SIP-over-WebSocket/WebRTC outbound call client integration, pending provider-specific end-to-end validation
+- Consent-gated mixed local/remote browser audio capture when the SIP peer connection exposes both streams
+- AES-256-GCM encrypted recording files on persistent server storage, plus role-checked playback API
 - Audit log and call summary endpoints
 - Docker-based frontend/API/PostgreSQL deployment definitions
 
 Not yet production-complete:
-- SIP/WebRTC signaling and actual inbound/outbound calling
+- Inbound-call UX and provider-specific PBX validation (outbound SIP/WebRTC client is scaffolded)
 - Real call-media capture/recording pipeline
-- Encrypted object storage, retention and playback authorization
+- Production-grade recording retention/deletion jobs and optional S3-compatible object storage adapter
 - Password reset, MFA, session revocation and comprehensive tests
 - Production migration/backup/restore process
 - Telephony-provider-specific adapter and end-to-end validation
