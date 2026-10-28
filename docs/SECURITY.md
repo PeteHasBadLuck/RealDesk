@@ -16,7 +16,8 @@ Review role permissions before adding endpoints. Use individual agent accounts a
 
 - User passwords are hashed using bcrypt.
 - VoIP passwords are encrypted at rest using AES-256-GCM and `VOIP_ENCRYPTION_KEY`.
-- The key must be stored in a secret manager or protected environment configuration and must not be committed.
+- The keys must be stored in a secret manager or protected environment configuration and must not be committed.
+- The SIP client configuration endpoint provides the configured SIP password to an authenticated agent browser so JsSIP can register. Use HTTPS only and prefer per-agent SIP credentials/extensions; do not reuse a privileged PBX trunk credential as an agent login.
 - Do not log authentication headers, passwords, SIP secrets, call audio or full contact payloads.
 - Production deployment must use HTTPS and secure cookie/token handling appropriate to the deployment threat model.
 
