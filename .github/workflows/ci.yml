@@ -16,7 +16,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
       - run: npm --workspace apps/api run build
-      - run: npm --workspace apps/web run build      - name: Validate Compose configuration
+      - run: npm --workspace apps/web run build
+      - name: Validate Compose configuration
         run: |
           cp .env.example .env
           docker compose config --quiet
