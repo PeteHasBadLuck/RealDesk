@@ -53,7 +53,7 @@ app.post("/api/auth/login", { config: { rateLimit: { max: 8, timeWindow: "1 minu
     return reply.code(401).send({ error: "Invalid credentials" });
   const user = candidates[0];
   const token = app.jwt.sign({ sub: user.id, companyId: user.companyId, role: user.role, email: user.email });
-  return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, company: user.company.name } };
+  return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role, company: { name: user.company.name } } };
 });
 app.get("/api/auth/me", { preHandler: [app.authenticate] }, async req => {
   const user = await prisma.user.findFirstOrThrow({ where: { id: req.session.sub, companyId: req.session.companyId }, select: { id: true, name: true, email: true, role: true, company: { select: { name: true } } } });
