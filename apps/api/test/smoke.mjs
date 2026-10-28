@@ -171,6 +171,11 @@ async function main() {
     expected: 201,
     body: { name: "Smoke Test Campaign", description: "CI-only synthetic contacts" }
   })).data;
+  await call("/api/leadscout/leads/not-a-real-lead-id/enrich", { token: owner.token, method: "POST", expected: 404 });
+  await call("/api/leadscout/import-to-campaign", {
+    token: owner.token, method: "POST", expected: 400,
+    body: { campaignId: "not-a-real-campaign-id", leadIds: [] }
+  });
   await call("/api/campaigns/" + campaign.id + "/contacts", {
     method: "POST", token: owner.token, body: { contactIds: [contact1.id], assignedTo: agent1.id }
   });
@@ -296,7 +301,7 @@ async function main() {
   await call("/api/auth/logout", { method: "POST", token: freshAgent2Login.token });
   await call("/api/contacts", { token: freshAgent2Login.token, expected: 401 });
 
-  console.log("RealDesk API smoke tests passed: company signup/isolation, login, roles, SIP secrets, ICE, campaign assignments, DNC/wrong-number, scheduled callbacks, encrypted recording upload/playback, password rotation, logout revocation, and audit log.");
+  console.log("RealDesk API smoke tests passed: company signup/isolation, LeadScout key secrecy/isolation, LeadScout enrichment/import validation, login, roles, SIP secrets, ICE, campaign assignments, DNC/wrong-number, scheduled callbacks, encrypted recording upload/playback, password rotation, logout revocation, and audit log.");
 }
 
 main().catch(error => {
