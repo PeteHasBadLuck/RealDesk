@@ -11,6 +11,7 @@ export default defineConfig({
   build: { rollupOptions: { input: {
     main: resolve(appDir, "index.html"),
     admin: resolve(appDir, "admin.html"),
-    agent: resolve(appDir, "agent.html")
+    agent: resolve(appDir, "agent.html"),
+    leadscout: resolve(appDir, "leadscout.html")
   } } }
 });
