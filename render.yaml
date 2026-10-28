@@ -1,0 +1,46 @@
+databases:
+  - name: realdesk-db
+    databaseName: realdesk
+    user: realdesk
+    plan: free
+    region: frankfurt
+
+services:
+  - type: web
+    name: api
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./apps/api/Dockerfile
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: realdesk-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: VOIP_ENCRYPTION_KEY
+        generateValue: true
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_COMPANY_NAME
+        value: Your Company
+      - key: CORS_ORIGIN
+        value: https://realdesk-web.onrender.com
+
+  - type: web
+    name: realdesk-web
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: ./apps/web/Dockerfile
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /
