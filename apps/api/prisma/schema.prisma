@@ -57,6 +57,9 @@ model User {
   passwordHash String
   role         Role     @default(AGENT)
   active       Boolean  @default(true)
+  sipUsername  String?
+  sipDomain    String?
+  encryptedSipSecret String?
   createdAt    DateTime @default(now())
   calls        CallRecord[] @relation("AgentCalls")
   @@unique([companyId, email])
